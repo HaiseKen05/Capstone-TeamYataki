@@ -1,4 +1,4 @@
-# Capstone-TeamYataki
+# Capstone-Team Yataki
 Capstone Thesis Repository 
 
 
