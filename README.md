@@ -1,7 +1,7 @@
 # Capstone-TeamYataki
 Capstone Thesis Repository 
 
-------------------------------------------------------
+
 
 ## Team Members 
 | **Name** | **Role** |
@@ -11,7 +11,6 @@ Capstone Thesis Repository
 |Kent John Olarana|System Analyst|
 |Mc Harly Misa|System Analyst|
 
--------------------------------------------------------
 
 ## Advisors
 | **Name**|
