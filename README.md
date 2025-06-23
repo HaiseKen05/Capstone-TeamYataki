@@ -4,9 +4,7 @@ Capstone Thesis Repository
 ------------------------------------------------------
 
 ## Team Members 
-| **Name** | **Role** | 
-|:---------|:---------|
-
+| **Name** | **Role** |
 |:--------:|:--------:|
 |Hannah Jean Torring|Team Leader|
 |Keith Zacharrie Espinosa|Full Stack Developer|
