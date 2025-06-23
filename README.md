@@ -10,12 +10,11 @@ Capstone Thesis Repository
 |Keith Zacharrie Espinosa|Full Stack Developer|
 |Kent John Olarana|System Analyst|
 |Mc Harly Misa|System Analyst|
-|:---------|:---------|
 
 -------------------------------------------------------
 
 ## Advisors
 | **Name**|
 |:-----|
-|Niñ0 Abao| 
+|Niño Abao| 
 |Joel Lim|
