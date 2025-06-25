@@ -1,1 +1,14 @@
+-- Step 1: Create the database
+CREATE DATABASE Capstone;
 
+-- Step 2: Use the database
+USE Capstone;
+
+-- Step 3: Create the table
+CREATE TABLE sensor_data (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    steps INT,
+    datetime DATETIME,
+    raw_voltage FLOAT,
+    raw_current FLOAT
+);
