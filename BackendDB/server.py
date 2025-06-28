@@ -2,10 +2,16 @@ from flask import Flask, request, jsonify, render_template_string
 from flask_bcrypt import Bcrypt
 from config import SQLALCHEMY_DATABASE_URI, SQLALCHEMY_TRACK_MODIFICATIONS
 from models import db, User
+from flask import redirect, url_for
+from flask import Flask, request, jsonify, render_template_string, redirect, url_for, session
+from flask import make_response
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = SQLALCHEMY_DATABASE_URI
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = SQLALCHEMY_TRACK_MODIFICATIONS
+app.secret_key = "your_super_secret_key"  # 🔐 Change this to something secure in production
+
+
 
 db.init_app(app)
 bcrypt = Bcrypt(app)
@@ -14,67 +20,277 @@ bcrypt = Bcrypt(app)
 def create_tables():
     db.create_all()
 
-@app.route("/", methods=["GET"])
-def home():
-    return jsonify({"message": "API is running from server.py!"})
+@app.route("/", methods=["GET", "POST"])
+def login():
+    if request.method == "POST":
+        data = request.form
+        username = data.get('username')
+        password = data.get('password')
+
+        if not username or not password:
+            return "<h3>Please enter both username and password. <a href='/'>Try again</a></h3>", 400
+
+        user = User.query.filter_by(username=username).first()
+
+        if user and bcrypt.check_password_hash(user.password, password):
+            session['user_id'] = user.id
+            session['username'] = user.username
+            session['role'] = user.role
+            return redirect(url_for('list_users'))
+        else:
+            return "<h3>Invalid username or password. <a href='/'>Try again</a></h3>", 401
+
+    # GET method: show login form
+    login_form = """
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+    <meta charset="UTF-8">
+    <title>Login</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0f2f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        form {
+            background-color: #ffffff;
+            padding: 32px 28px;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
+            width: 100%;
+            max-width: 400px;
+        }
+
+        h2 {
+            text-align: center;
+            margin-bottom: 24px;
+            font-weight: 600;
+            color: #222;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            color: #333;
+        }
+
+        input[type="text"],
+        input[type="password"] {
+            width: 100%;
+            padding: 10px 12px;
+            margin-bottom: 16px;
+            font-size: 15px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background-color: #fff;
+            transition: border 0.2s ease-in-out;
+        }
+
+        input[type="text"]:focus,
+        input[type="password"]:focus {
+            border-color: #0066cc;
+            outline: none;
+        }
+
+        input[type="submit"] {
+            width: 100%;
+            padding: 12px;
+            background-color: #0066cc;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        input[type="submit"]:hover {
+            background-color: #004a99;
+        }
+    </style>
+</head>
+<body>
+    <form method="POST">
+        <h2>Login</h2>
+
+        <label>Username</label>
+        <input type="text" name="username" required>
+
+        <label>Password</label>
+        <input type="password" name="password" required>
+
+        <input type="submit" value="Login">
+    </form>
+</body>
+</html>
+
+"""
+    return login_form
+
 
 @app.route("/users", methods=["GET"])
 def list_users():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
     users = User.query.all()
     user_data = [u.as_dict() for u in users]
 
     if request.headers.get('Accept') == 'application/json' or request.args.get('format') == 'json':
         return jsonify(user_data)
-
+    
     html_template = """
     <!DOCTYPE html>
-    <html>
+    <html lang="en">
     <head>
-        <title>Users Table</title>
-        <style>
-            body { font-family: Arial; margin: 20px; background: #f4f4f4; }
-            table { border-collapse: collapse; width: 100%; background: white; }
-            th, td { border: 1px solid #ccc; padding: 10px; text-align: left; }
-            th { background-color: #333; color: white; }
-            tr:nth-child(even) { background-color: #f9f9f9; }
-            .button {
-                display: inline-block;
-                margin-bottom: 15px;
-                padding: 10px 20px;
-                background-color: #333;
-                color: white;
-                text-decoration: none;
-                border-radius: 5px;
+    <meta charset="UTF-8">
+    <title>Users Table</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0f2f5;
+            margin: 0;
+            padding: 20px;
+        }
+
+        h2 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+
+        .button {
+            display: inline-block;
+            padding: 10px 18px;
+            margin: 10px 10px 20px 0;
+            background-color: #0066cc;
+            color: #fff;
+            text-decoration: none;
+            border-radius: 6px;
+            transition: background-color 0.3s ease;
+        }
+
+        .button:hover {
+            background-color: #004a99;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0 8px;
+        }
+
+        th, td {
+            text-align: left;
+            padding: 14px 18px;
+            background-color: #fff;
+        }
+
+        th {
+            background-color: #0066cc;
+            color: white;
+            border-top-left-radius: 6px;
+            border-top-right-radius: 6px;
+        }
+
+        tr {
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+            border-radius: 8px;
+        }
+
+        tr td:first-child {
+            border-top-left-radius: 8px;
+            border-bottom-left-radius: 8px;
+        }
+
+        tr td:last-child {
+            border-top-right-radius: 8px;
+            border-bottom-right-radius: 8px;
+        }
+
+        @media (max-width: 768px) {
+            table, thead, tbody, th, td, tr {
+                display: block;
             }
-        </style>
-    </head>
-    <body>
-        <h2>User List</h2>
-        <a class="button" href="/register-form">Register New User</a>
-        <table>
-            <thead>
-                <tr>
-                    <th>ID</th>
-                    <th>Name</th>
-                    <th>Role</th>
-                    <th>Username</th>
-                    <th>Email</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for user in users %}
-                <tr>
-                    <td>{{ user.id }}</td>
-                    <td>{{ user.name }}</td>
-                    <td>{{ user.role }}</td>
-                    <td>{{ user.username }}</td>
-                    <td>{{ user.email }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+
+            thead {
+                display: none;
+            }
+
+            tr {
+                margin-bottom: 15px;
+            }
+
+            td {
+                background-color: #fff;
+                position: relative;
+                padding-left: 50%;
+                text-align: right;
+            }
+
+            td::before {
+                position: absolute;
+                top: 14px;
+                left: 18px;
+                width: 45%;
+                padding-right: 10px;
+                white-space: nowrap;
+                font-weight: bold;
+                text-align: left;
+            }
+
+            td:nth-of-type(1)::before { content: "ID"; }
+            td:nth-of-type(2)::before { content: "Name"; }
+            td:nth-of-type(3)::before { content: "Role"; }
+            td:nth-of-type(4)::before { content: "Username"; }
+            td:nth-of-type(5)::before { content: "Email"; }
+        }
+    </style>
+</head>
+<body>
+    <h2>User List</h2>
+    <a class="button" href="/register-form">Register New User</a>
+    <a class="button" href="/logout">Logout</a>
+
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Role</th>
+                <th>Username</th>
+                <th>Email</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for user in users %}
+            <tr>
+                <td>{{ user.id }}</td>
+                <td>{{ user.name }}</td>
+                <td>{{ user.role }}</td>
+                <td>{{ user.username }}</td>
+                <td>{{ user.email }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
     </body>
     </html>
+
     """
     return render_template_string(html_template, users=user_data)
 
@@ -110,45 +326,115 @@ def register_form():
 
     form_html = """
     <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Register User</title>
-        <style>
-            body { font-family: Arial; background: #f4f4f4; margin: 20px; }
-            form { background: white; padding: 20px; border-radius: 5px; max-width: 400px; }
-            input, select { width: 100%; padding: 10px; margin: 10px 0; }
-            input[type=submit] {
-                background-color: #333;
-                color: white;
-                border: none;
-                cursor: pointer;
-            }
-        </style>
-    </head>
-    <body>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Register User</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0f2f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 40px 20px;
+            min-height: 100vh;
+            margin: 0;
+        }
+
+        form {
+            background-color: #ffffff;
+            padding: 30px 25px;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
+            max-width: 440px;
+            width: 100%;
+        }
+
+        h2 {
+            margin-bottom: 24px;
+            text-align: center;
+            font-weight: 600;
+            color: #222;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            color: #333;
+        }
+
+        input[type="text"],
+        input[type="email"],
+        input[type="password"],
+        select {
+            width: 100%;
+            padding: 10px 12px;
+            margin-bottom: 16px;
+            font-size: 15px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background-color: #fafafa;
+            transition: border-color 0.2s ease-in-out;
+        }
+
+        input:focus,
+        select:focus {
+            border-color: #0066cc;
+            outline: none;
+            background-color: #fff;
+        }
+
+        input[type="submit"] {
+            width: 100%;
+            padding: 12px;
+            background-color: #0066cc;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        input[type="submit"]:hover {
+            background-color: #004a99;
+        }
+    </style>
+</head>
+<body>
+    <form method="POST">
         <h2>Register New User</h2>
-        <form method="POST">
-            <label>Name</label>
-            <input type="text" name="name" required>
-            
-            <label>Role</label>
-            <select name="role" required>
-                <option value="User">User</option>
-                <option value="Admin">Admin</option>
-            </select>
 
-            <label>Username</label>
-            <input type="text" name="username" required>
+        <label>Name</label>
+        <input type="text" name="name" required>
 
-            <label>Email</label>
-            <input type="email" name="email" required>
+        <label>Role</label>
+        <select name="role" required>
+            <option value="User">User</option>
+            <option value="Admin">Admin</option>
+        </select>
 
-            <label>Password</label>
-            <input type="password" name="password" required>
+        <label>Username</label>
+        <input type="text" name="username" required>
 
-            <input type="submit" value="Register">
-        </form>
-    </body>
+        <label>Email</label>
+        <input type="email" name="email" required>
+
+        <label>Password</label>
+        <input type="password" name="password" required>
+
+        <input type="submit" value="Register">
+            </form>
+        </body>
     </html>
     """
     return form_html
@@ -182,5 +468,14 @@ def register_user():
 
     return jsonify({"message": "User registered successfully!"}), 201
 
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for('login'))
+
+
 if __name__ == "__main__":
     app.run(debug=True)
+    
+    
