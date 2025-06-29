@@ -291,7 +291,6 @@ def list_users():
 </head>
 <body>
     <h2>User List</h2>
-    <a class="button" href="/register-form">Register New User</a>
     <a class="button" href="/logout">Logout</a>
 
     <table>
