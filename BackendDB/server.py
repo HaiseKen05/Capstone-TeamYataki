@@ -335,6 +335,7 @@ def list_users():
     return response
 
 @app.route("/register-form", methods=["GET", "POST"])
+@login_required
 def register_form():
     if request.method == "POST":
         data = request.form
@@ -362,7 +363,7 @@ def register_form():
         db.session.add(new_user)
         db.session.commit()
 
-        return "<h3>User Registered! <a href='/users'>Go back to User List</a></h3>"
+        return redirect(url_for('list_users'))
 
     form_html = """
     <!DOCTYPE html>
@@ -478,37 +479,6 @@ def register_form():
     </html>
     """
     return form_html
-
-@app.route("/register", methods=["POST"])
-@login_required
-def register_user():
-    data = request.get_json()
-
-    required_fields = ['name', 'role', 'username', 'email', 'password']
-    if not all(field in data for field in required_fields):
-        return jsonify({"error": "Missing required fields"}), 400
-
-    if data['role'] not in ['Admin', 'User']:
-        return jsonify({"error": "Invalid role type"}), 400
-
-    if User.query.filter((User.username == data['username']) | (User.email == data['email'])).first():
-        return jsonify({"error": "Username or email already exists"}), 409
-
-    hashed_pw = bcrypt.generate_password_hash(data['password']).decode('utf-8')
-
-    new_user = User(
-        name=data['name'],
-        role=data['role'],
-        username=data['username'],
-        email=data['email'],
-        password=hashed_pw
-    )
-
-    db.session.add(new_user)
-    db.session.commit()
-
-    return jsonify({"message": "User registered successfully!"}), 201
-
 
 
 
