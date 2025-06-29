@@ -5,6 +5,25 @@ from models import db, User
 from flask import redirect, url_for
 from flask import Flask, request, jsonify, render_template_string, redirect, url_for, session
 from flask import make_response
+from functools import wraps
+from flask import redirect, session, url_for
+
+def login_required(view_func):
+    @wraps(view_func)
+    def wrapper(*args, **kwargs):
+        if 'user_id' not in session:
+            return redirect(url_for('login'))
+
+        result = view_func(*args, **kwargs)
+
+        # Only apply cache control if it's a response object
+        response = make_response(result)
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        return response
+    return wrapper
+
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = SQLALCHEMY_DATABASE_URI
@@ -132,8 +151,19 @@ def login():
 
         <label>Password</label>
         <input type="password" name="password" required>
-
+        
         <input type="submit" value="Login">
+        
+       <p style="text-align: center; margin-top: 16px;">
+    <a href="/register-form" style="
+        color: #0066cc;
+        text-decoration: none;
+        font-weight: 500;
+    ">
+        Don't have an account? Register here
+    </a>
+</p>
+        
     </form>
 </body>
 </html>
@@ -143,17 +173,15 @@ def login():
 
 
 @app.route("/users", methods=["GET"])
+@login_required
 def list_users():
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-
     users = User.query.all()
     user_data = [u.as_dict() for u in users]
 
     if request.headers.get('Accept') == 'application/json' or request.args.get('format') == 'json':
-        return jsonify(user_data)
-    
-    html_template = """
+        response = jsonify(user_data)
+    else:
+        html_template = """
     <!DOCTYPE html>
     <html lang="en">
     <head>
@@ -288,11 +316,24 @@ def list_users():
             {% endfor %}
         </tbody>
     </table>
+    <script>
+    window.addEventListener("pageshow", function (event) {
+        if (event.persisted || (window.performance && performance.navigation.type === 2)) {
+            window.location.reload();
+        }
+    });
+    </script>
     </body>
     </html>
 
     """
-    return render_template_string(html_template, users=user_data)
+    response = make_response(render_template_string(html_template, users=user_data))
+    
+     # 👇 Force the browser not to cache this response
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
 
 @app.route("/register-form", methods=["GET", "POST"])
 def register_form():
@@ -440,6 +481,7 @@ def register_form():
     return form_html
 
 @app.route("/register", methods=["POST"])
+@login_required
 def register_user():
     data = request.get_json()
 
@@ -469,10 +511,17 @@ def register_user():
     return jsonify({"message": "User registered successfully!"}), 201
 
 
+
+
 @app.route("/logout")
 def logout():
     session.clear()
-    return redirect(url_for('login'))
+    response = redirect(url_for('login'))
+    response = make_response(response)
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
 
 
 if __name__ == "__main__":
