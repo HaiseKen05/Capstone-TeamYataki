@@ -55,6 +55,7 @@ bcrypt = Bcrypt(app)
 def create_tables():
     db.create_all()
 
+# Login Page
 @app.route("/", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
@@ -189,6 +190,7 @@ def login():
 """
     return login_form
 
+<<<<<<< HEAD
 @app.route("/user-home")
 @user_required
 def user_home():
@@ -249,6 +251,9 @@ def user_home():
     return html
 
 
+=======
+# User Dashboard
+>>>>>>> 0faaa0d8860747b44306afb38094a14884c8b997
 @app.route("/users", methods=["GET"])
 @admin_required
 def list_users():
@@ -411,6 +416,7 @@ def list_users():
     response.headers["Expires"] = "0"
     return response
 
+# Register
 @app.route("/register-form", methods=["GET", "POST"])
 @login_required
 def register_form():
@@ -558,7 +564,7 @@ def register_form():
     return form_html
 
 
-
+# Logout
 @app.route("/logout")
 def logout():
     session.clear()
