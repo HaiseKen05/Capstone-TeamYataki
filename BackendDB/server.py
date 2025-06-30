@@ -8,6 +8,22 @@ from flask import make_response
 from functools import wraps
 from flask import redirect, session, url_for
 
+
+def admin_required(view_func):
+    @wraps(view_func)
+    def wrapper(*args, **kwargs):
+        if 'user_id' not in session or session.get('role') != 'Admin':
+            return redirect(url_for('user_home'))  # or 403 page
+        return login_required(view_func)(*args, **kwargs)
+    return wrapper
+
+def user_required(view_func):
+    @wraps(view_func)
+    def wrapper(*args, **kwargs):
+        if 'user_id' not in session or session.get('role') != 'User':
+            return redirect(url_for('list_users'))  # or 403 page
+        return login_required(view_func)(*args, **kwargs)
+    return wrapper
 def login_required(view_func):
     @wraps(view_func)
     def wrapper(*args, **kwargs):
@@ -55,9 +71,11 @@ def login():
             session['user_id'] = user.id
             session['username'] = user.username
             session['role'] = user.role
-            return redirect(url_for('list_users'))
-        else:
-            return "<h3>Invalid username or password. <a href='/'>Try again</a></h3>", 401
+
+            if user.role == "Admin":
+             return redirect(url_for('list_users'))
+            else:
+             return redirect(url_for('user_home'))
 
     # GET method: show login form
     login_form = """
@@ -171,9 +189,68 @@ def login():
 """
     return login_form
 
+@app.route("/user-home")
+@user_required
+def user_home():
+    html = """
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title>User Home</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+            body {
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                background-color: #e6f2ff;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                height: 100vh;
+                margin: 0;
+            }
+
+            .container {
+                text-align: center;
+                background-color: white;
+                padding: 40px;
+                border-radius: 10px;
+                box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+            }
+
+            h1 {
+                color: #333;
+            }
+
+            a {
+                display: inline-block;
+                margin-top: 20px;
+                padding: 10px 20px;
+                background-color: #0066cc;
+                color: white;
+                text-decoration: none;
+                border-radius: 6px;
+                transition: background-color 0.3s ease;
+            }
+
+            a:hover {
+                background-color: #004a99;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>Hello User</h1>
+            <a href="/logout">Logout</a>
+        </div>
+    </body>
+    </html>
+    """
+    return html
+
 
 @app.route("/users", methods=["GET"])
-@login_required
+@admin_required
 def list_users():
     users = User.query.all()
     user_data = [u.as_dict() for u in users]
