@@ -189,8 +189,7 @@ def login():
 
 """
     return login_form
-
-<<<<<<< HEAD
+# User Home
 @app.route("/user-home")
 @user_required
 def user_home():
@@ -251,9 +250,7 @@ def user_home():
     return html
 
 
-=======
 # User Dashboard
->>>>>>> 0faaa0d8860747b44306afb38094a14884c8b997
 @app.route("/users", methods=["GET"])
 @admin_required
 def list_users():
