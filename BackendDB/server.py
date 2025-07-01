@@ -436,7 +436,7 @@ def list_users():
     response.headers["Expires"] = "0"
     return response
 
-# Register
+# Register removed @login_required
 @app.route("/register-form", methods=["GET", "POST"])
 def register_form():
     if request.method == "POST":
