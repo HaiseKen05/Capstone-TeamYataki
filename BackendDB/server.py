@@ -178,8 +178,8 @@ def login():
         color: #0066cc;
         text-decoration: none;
         font-weight: 500;
-    ">
-        Don't have an account? Register here
+    ">  
+    Don't have an account? Register here
     </a>
 </p>
         
@@ -438,7 +438,6 @@ def list_users():
 
 # Register
 @app.route("/register-form", methods=["GET", "POST"])
-@login_required
 def register_form():
     if request.method == "POST":
         data = request.form
@@ -470,8 +469,8 @@ def register_form():
 
     form_html = """
     <!DOCTYPE html>
-<html lang="en">
-<head>
+    <html lang="en">
+    <head>
     <meta charset="UTF-8">
     <title>Register User</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
