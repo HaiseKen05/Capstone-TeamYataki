@@ -450,7 +450,9 @@ def register_form():
             return "Missing fields", 400
 
         if data['role'] not in ['Admin', 'User']:
-            return "Invalid role type", 400
+            return "Invalid role type", 400 
+        if User.role == ['Admin']:
+            return redirect(url_for('/users'))
 
         if User.query.filter((User.username == data['username']) | (User.email == data['email'])).first():
             return "Username or email already exists", 409
