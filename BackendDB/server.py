@@ -444,16 +444,21 @@ def list_users():
 def register_form():
     if request.method == "POST":
         data = request.form
-
+        
+        # Missing fields
         required_fields = ['name', 'role', 'username', 'email', 'password']
         if not all(field in data for field in required_fields):
             return "Missing fields", 400
-
+        
+        # Redirect if registered account is a user or admin
         if data['role'] not in ['Admin', 'User']:
             return "Invalid role type", 400 
+        
+        # If a registered account is admin, directs to /users
         if User.role == ['Admin']:
             return redirect(url_for('/users'))
 
+        # If registered name or email is taken
         if User.query.filter((User.username == data['username']) | (User.email == data['email'])).first():
             return "Username or email already exists", 409
 
