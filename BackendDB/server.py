@@ -8,7 +8,7 @@ from flask import make_response
 from functools import wraps
 from flask import redirect, session, url_for
 
-
+# RBAC - Admin
 def admin_required(view_func):
     @wraps(view_func)
     def wrapper(*args, **kwargs):
@@ -16,7 +16,7 @@ def admin_required(view_func):
             return redirect(url_for('user_home'))  # or 403 page
         return login_required(view_func)(*args, **kwargs)
     return wrapper
-
+# RBAC - User
 def user_required(view_func):
     @wraps(view_func)
     def wrapper(*args, **kwargs):
@@ -24,6 +24,8 @@ def user_required(view_func):
             return redirect(url_for('list_users'))  # or 403 page
         return login_required(view_func)(*args, **kwargs)
     return wrapper
+
+# LOGIN / REGISTER Function
 def login_required(view_func):
     @wraps(view_func)
     def wrapper(*args, **kwargs):
@@ -40,14 +42,14 @@ def login_required(view_func):
         return response
     return wrapper
 
-
+# DB Connection
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = SQLALCHEMY_DATABASE_URI
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = SQLALCHEMY_TRACK_MODIFICATIONS
 app.secret_key = "your_super_secret_key"  # 🔐 Change this to something secure in production
 
 
-
+# Initialization
 db.init_app(app)
 bcrypt = Bcrypt(app)
 
@@ -189,6 +191,7 @@ def login():
 
 """
     return login_form
+
 # User Home
 @app.route("/user-home")
 @user_required
