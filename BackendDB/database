@@ -5,13 +5,18 @@ CREATE DATABASE Capstone;
 USE Capstone;
 
 -- Step 3: Create the table
-CREATE TABLE sensor_data (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    steps INT,
-    datetime DATETIME,
-    raw_voltage FLOAT,
-    raw_current FLOAT
-);
+CREATE TABLE energy_raw (
+    id          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,  -- primary‑key surrogate
+    device_id   VARCHAR(32)     NOT NULL,                 -- ESP32 MAC / serial
+    steps       INT UNSIGNED    NOT NULL,                 -- foot‑step count
+    voltage     DECIMAL(5,3)    NOT NULL,                 -- volts   (0 – 999.999)
+    current     DECIMAL(6,4)    NOT NULL,                 -- amps    (0 – 999.9999)
+    timestamp   DATETIME        NOT NULL,                 -- reading end‑time
+    PRIMARY KEY (id),
+    KEY idx_device_time (device_id, timestamp)            -- speeds time‑range lookups
+) ENGINE=InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE        = utf8mb4_unicode_ci;
 
 CREATE TABLE users (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -20,3 +25,4 @@ CREATE TABLE users (
     username VARCHAR(100),
     password VARCHAR(100),
 )
+
