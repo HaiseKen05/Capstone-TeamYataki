@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Sensor Data Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            background-color: #f9f9f9;
+            padding: 30px;
+        }
+
+        h2 {
+            font-size: 28px;
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: #fff;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        th, td {
+            padding: 14px 18px;
+            border-bottom: 1px solid #e0e0e0;
+            text-align: left;
+        }
+
+        th {
+            background-color: #0066cc;
+            color: white;
+        }
+
+        tr:hover {
+            background-color: #f1faff;
+        }
+
+        .back-btn {
+            margin-top: 20px;
+            display: inline-block;
+            background-color: #0066cc;
+            color: white;
+            padding: 10px 16px;
+            border-radius: 6px;
+            text-decoration: none;
+        }
+
+        .back-btn:hover {
+            background-color: #004a99;
+        }
+        .button {
+            display: inline-block;
+            padding: 8px 14px;
+            margin: 6px 4px;
+            font-size: 14px;
+            background-color: #0066cc;
+            color: #fff;
+            text-decoration: none;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        .button:hover {
+            background-color: #004a99;
+        }
+    </style>
+</head>
+<body>
+
+<h2>Sensor Data Dashboard</h2>
+
+<button class="button" onclick="document.getElementById('logModal').style.display='block'">➕ Add Log Entry</button>
+
+<table>
+
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Steps</th>
+            <th>Date/Time</th>
+            <th>Voltage (V)</th>
+            <th>Current (A)</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in sensor_data %}
+        <tr>
+            <td>{{ row.id }}</td>
+            <td>{{ row.steps }}</td>
+            <td>{{ row.datetime.strftime("%Y-%m-%d %H:%M") }}</td>
+            <td>{{ row.raw_voltage }}</td>
+            <td>{{ row.raw_current }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<a class="back-btn" href="/users">⬅ Back to Admin Panel</a>
+
+</body>
+</html>

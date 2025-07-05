@@ -203,6 +203,14 @@ def add_log():
     except Exception as e:
         return f"<h3>Failed to log data: {e}</h3>", 500
 
+# Sensor Data 
+@app.route("/sensor-dashboard")
+@admin_required
+def sensor_dashboard():
+    from models import SensorData
+    data = SensorData.query.order_by(SensorData.datetime.desc()).all()
+    return render_template("sensor_dashboard.html", sensor_data=data)
+
 
 # Logout
 @app.route("/logout")
