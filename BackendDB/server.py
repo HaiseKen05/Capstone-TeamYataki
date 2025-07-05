@@ -8,7 +8,7 @@ from flask import make_response
 from functools import wraps
 from flask import redirect, session, url_for
 from flask import render_template
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 # RBAC - Admin
@@ -129,10 +129,10 @@ def register_form():
         if data['role'] not in ['Admin', 'User']:
             return "Invalid role type", 400 
         
-        # If a registered account is admin, directs to /users
+         # If a registered account is admin, directs to /users
         if User.role == ['Admin']:
             return redirect(url_for('/users'))
-
+        
         # If registered name or email is taken
         if User.query.filter((User.username == data['username']) | (User.email == data['email'])).first():
             return "Username or email already exists", 409
@@ -187,7 +187,7 @@ def delete_user(user_id):
 @admin_required
 def add_log():
     from datetime import datetime
-    from models import SensorData  # ensure this is your table model
+    from models import SensorData
 
     data = request.form
     try:
@@ -199,7 +199,7 @@ def add_log():
         )
         db.session.add(log)
         db.session.commit()
-        return redirect(url_for("list_users"))
+        return redirect(url_for("sensor_dashboard"))
     except Exception as e:
         return f"<h3>Failed to log data: {e}</h3>", 500
 
@@ -208,8 +208,25 @@ def add_log():
 @admin_required
 def sensor_dashboard():
     from models import SensorData
-    data = SensorData.query.order_by(SensorData.datetime.desc()).all()
-    return render_template("sensor_dashboard.html", sensor_data=data)
+    filter_type = request.args.get("filter")
+
+    now = datetime.now()
+    if filter_type == "day":
+        start_time = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    elif filter_type == "week":
+        start_time = now - timedelta(days=now.weekday())
+    elif filter_type == "month":
+        start_time = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    else:
+        start_time = None
+
+    if start_time:
+        data = SensorData.query.filter(SensorData.datetime >= start_time).order_by(SensorData.datetime.desc()).all()
+    else:
+        data = SensorData.query.order_by(SensorData.datetime.desc()).all()
+
+    return render_template("sensor_dashboard.html", sensor_data=data, filter=filter_type)
+
 
 
 # Logout
@@ -226,5 +243,3 @@ def logout():
 
 if __name__ == "__main__":
     app.run(debug=True)
-    
-    

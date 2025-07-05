@@ -71,6 +71,60 @@
         .button:hover {
             background-color: #004a99;
         }
+         /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 10;
+            left: 0; top: 0;
+            width: 100%; height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.4);
+        }
+
+        .modal-content {
+            background-color: #fff;
+            margin: 10% auto;
+            padding: 20px;
+            border-radius: 10px;
+            width: 90%;
+            max-width: 400px;
+        }
+
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 24px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .close:hover {
+            color: black;
+        }
+
+        input[type="number"],
+        input[type="datetime-local"] {
+            width: 100%;
+            padding: 10px;
+            margin: 8px 0;
+            box-sizing: border-box;
+        }
+
+        .submit-btn {
+            background-color: #0066cc;
+            color: white;
+            padding: 10px;
+            width: 100%;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        .submit-btn:hover {
+            background-color: #004a99;
+        }
     </style>
 </head>
 <body>
@@ -78,6 +132,16 @@
 <h2>Sensor Data Dashboard</h2>
 
 <button class="button" onclick="document.getElementById('logModal').style.display='block'">➕ Add Log Entry</button>
+<!-- Filter Dropdown -->
+<div style="margin-bottom: 20px;">
+    <label for="filter-select"><strong>Filter By:</strong></label>
+    <select id="filter-select" onchange="handleFilterChange()" style="padding: 8px; font-size: 14px; border-radius: 6px;">
+        <option value="">All</option>
+        <option value="day" {% if filter == 'day' %}selected{% endif %}>Today</option>
+        <option value="week" {% if filter == 'week' %}selected{% endif %}>This Week</option>
+        <option value="month" {% if filter == 'month' %}selected{% endif %}>This Month</option>
+    </select>
+</div>
 
 <table>
 
@@ -105,5 +169,35 @@
 
 <a class="back-btn" href="/users">⬅ Back to Admin Panel</a>
 
+
+<!-- Modal -->
+    <div id="logModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="document.getElementById('logModal').style.display='none'">&times;</span>
+            <h3>Add Sensor Log</h3>
+            <form method="POST" action="/add-log">
+                <label>Steps</label>
+                <input type="number" name="steps" required>
+
+                <label>Date & Time</label>
+                <input type="datetime-local" name="datetime" required>
+
+                <label>Raw Voltage</label>
+                <input type="number" step="any" name="raw_voltage" required>
+
+                <label>Raw Current</label>
+                <input type="number" step="any" name="raw_current" required>
+
+                <input type="submit" class="submit-btn" value="Add Log">
+            </form>
+        </div>
+    </div>
+
+    <script>
+    function handleFilterChange() {
+        const selected = document.getElementById("filter-select").value;
+        window.location.href = selected ? `/sensor-dashboard?filter=${selected}` : '/sensor-dashboard';
+    }
+</script>
 </body>
 </html>

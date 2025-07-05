@@ -209,30 +209,6 @@
     </table>
 
     <a class="button" href="/logout">🚪 Logout</a>
-
-    <!-- Modal -->
-    <div id="logModal" class="modal">
-        <div class="modal-content">
-            <span class="close" onclick="document.getElementById('logModal').style.display='none'">&times;</span>
-            <h3>Add Sensor Log</h3>
-            <form method="POST" action="/add-log">
-                <label>Steps</label>
-                <input type="number" name="steps" required>
-
-                <label>Date & Time</label>
-                <input type="datetime-local" name="datetime" required>
-
-                <label>Raw Voltage</label>
-                <input type="number" step="any" name="raw_voltage" required>
-
-                <label>Raw Current</label>
-                <input type="number" step="any" name="raw_current" required>
-
-                <input type="submit" class="submit-btn" value="Add Log">
-            </form>
-        </div>
-    </div>
-
     <script>
     window.addEventListener("pageshow", function (event) {
         if (event.persisted || (window.performance && performance.navigation.type === 2)) {
