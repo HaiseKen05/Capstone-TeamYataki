@@ -1,0 +1,164 @@
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+    <meta charset="UTF-8">
+    <title>Users Table</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            background-color: #f5f7fa;
+            margin: 0;
+            padding: 30px;
+        }
+
+        h2 {
+            color: #222;
+            margin-bottom: 25px;
+            font-size: 28px;
+        }
+
+        .button {
+            display: inline-block;
+            padding: 8px 14px;
+            margin: 6px 4px;
+            font-size: 14px;
+            background-color: #0066cc;
+            color: #fff;
+            text-decoration: none;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        .button:hover {
+            background-color: #004a99;
+        }
+
+        .delete {
+            background-color: #d9534f;
+        }
+
+        .delete:hover {
+            background-color: #b52b27;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.06);
+        }
+
+        thead {
+            background-color: #0066cc;
+            color: white;
+        }
+
+        th, td {
+            text-align: left;
+            padding: 16px;
+            border-bottom: 1px solid #eee;
+        }
+
+        tr:hover {
+            background-color: #f2f9ff;
+            transition: 0.2s;
+        }
+
+        td:last-child {
+            white-space: nowrap;
+        }
+
+        @media (max-width: 768px) {
+            table, thead, tbody, th, td, tr {
+                display: block;
+            }
+
+            thead {
+                display: none;
+            }
+
+            tr {
+                background-color: #fff;
+                margin-bottom: 20px;
+                padding: 15px;
+                border-radius: 8px;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            }
+
+            td {
+                position: relative;
+                padding-left: 50%;
+                text-align: right;
+                border: none;
+                border-bottom: 1px solid #eee;
+            }
+
+            td::before {
+                content: attr(data-label);
+                position: absolute;
+                left: 15px;
+                width: 45%;
+                white-space: nowrap;
+                text-align: left;
+                font-weight: bold;
+                color: #444;
+            }
+
+            td:last-child {
+                text-align: center;
+                padding-top: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h2>Registered Users</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Role</th>
+                <th>Username</th>
+                <th>Email</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for user in users %}
+            <tr>
+                <td data-label="ID">{{ user.id }}</td>
+                <td data-label="Name">{{ user.name }}</td>
+                <td data-label="Role">{{ user.role }}</td>
+                <td data-label="Username">{{ user.username }}</td>
+                <td data-label="Email">{{ user.email }}</td>
+                <td>
+                    <a class="button" href="/edit-user/{{ user.id }}">✏️ Edit</a>
+                    <a class="button delete" href="/delete-user/{{ user.id }}" onclick="return confirm('Are you sure you want to delete this user?')">🗑️ Delete</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <a class="button" href="/logout">🚪 Logout</a>
+
+    <script>
+    window.addEventListener("pageshow", function (event) {
+        if (event.persisted || (window.performance && performance.navigation.type === 2)) {
+            window.location.reload();
+        }
+    });
+    </script>
+</body>
+</html>
