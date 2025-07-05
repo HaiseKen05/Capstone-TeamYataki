@@ -8,6 +8,7 @@ from flask import make_response
 from functools import wraps
 from flask import redirect, session, url_for
 from flask import render_template
+from datetime import datetime
 
 
 # RBAC - Admin
@@ -180,6 +181,27 @@ def delete_user(user_id):
     db.session.delete(user)
     db.session.commit()
     return redirect(url_for('list_users'))
+
+# Log Entry
+@app.route("/add-log", methods=["POST"])
+@admin_required
+def add_log():
+    from datetime import datetime
+    from models import SensorData  # ensure this is your table model
+
+    data = request.form
+    try:
+        log = SensorData(
+            steps=int(data["steps"]),
+            datetime=datetime.strptime(data["datetime"], "%Y-%m-%dT%H:%M"),
+            raw_voltage=float(data["raw_voltage"]),
+            raw_current=float(data["raw_current"])
+        )
+        db.session.add(log)
+        db.session.commit()
+        return redirect(url_for("list_users"))
+    except Exception as e:
+        return f"<h3>Failed to log data: {e}</h3>", 500
 
 # Logout
 @app.route("/logout")
