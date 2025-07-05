@@ -26,3 +26,105 @@ CREATE TABLE users (
     password VARCHAR(100),
 )
 
+????
+
+/* ===============================================================
+   1.  DEVICE CATALOG  (optional but recommended)
+   ---------------------------------------------------------------*/
+CREATE TABLE devices (
+    device_id  CHAR(36)      PRIMARY KEY,          -- UUID string
+    name       VARCHAR(64)   NOT NULL,
+    location   VARCHAR(128),                       -- “Lab Bench”, “Campus Track”, …
+    timezone   VARCHAR(64)   NOT NULL DEFAULT 'Asia/Manila',
+    created_at TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+/* ===============================================================
+   2.  RAW SENSOR LOG
+   ---------------------------------------------------------------*/
+CREATE TABLE raw_step_energy (
+    id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+
+    /* --- foreign key to whichever piezo board sent the sample --- */
+    device_id       CHAR(36)      NOT NULL,
+    
+    /* --- sample timing --- */
+    sample_ts       DATETIME(6)   NOT NULL,     -- ESP32’s timestamp
+    sample_seconds  INT UNSIGNED  NOT NULL      DEFAULT 60,  
+        /* duration of the sample window; 60 s if you push once a minute */
+
+    /* --- sensor readings --- */
+    steps           INT UNSIGNED      NOT NULL,         -- step count in this window
+    voltage_v       DECIMAL(6,3)      NOT NULL,         -- e.g. 3.300  V
+    current_a       DECIMAL(6,3)      NOT NULL,         -- e.g. 0.015  A
+
+    /* --- generated helpers ------------------------------------- */
+    -- Instantaneous power for the window (W)
+    power_w     DECIMAL(10,3)
+        AS (voltage_v * current_a) STORED,
+
+    -- Energy for the window (Wh)  ->  V * A * t  / 3600
+    energy_wh   DECIMAL(12,4)
+        AS (voltage_v * current_a * sample_seconds / 3600) STORED,
+
+    /* --- housekeeping --- */
+    created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    
+    /* --- indexes ------------------------------------------------ */
+    INDEX idx_device_time (device_id, sample_ts),
+
+    CONSTRAINT fk_device
+        FOREIGN KEY (device_id) REFERENCES devices(device_id)
+        ON DELETE CASCADE
+) ENGINE=InnoDB
+  COMMENT='1‑row‑per‑sample feed from ESP32 energy harvester';
+
+/* (Optional) Partition by month if data volume is huge
+ALTER TABLE raw_step_energy
+PARTITION BY RANGE COLUMNS(sample_ts) (
+  PARTITION p2025_07 VALUES LESS THAN ('2025‑08‑01'),
+  PARTITION p2025_08 VALUES LESS THAN ('2025‑09‑01'),
+  PARTITION pMax     VALUES LESS THAN (MAXVALUE)
+);
+*/
+
+/* ===============================================================
+   3.  AGGREGATED VIEWS FOR ML & DASHBOARDS
+   ---------------------------------------------------------------*/
+
+/* ---- DAILY ---- */
+CREATE OR REPLACE VIEW daily_energy AS
+SELECT
+    device_id,
+    DATE(sample_ts)                    AS day,
+    SUM(steps)                         AS total_steps,
+    SUM(energy_wh)                     AS energy_wh,
+    AVG(voltage_v)                     AS avg_voltage_v,
+    AVG(current_a)                     AS avg_current_a
+FROM raw_step_energy
+GROUP BY device_id, DATE(sample_ts);
+
+/* ---- ISO WEEK (Mon–Sun) ---- */
+CREATE OR REPLACE VIEW weekly_energy AS
+SELECT
+    device_id,
+    YEARWEEK(sample_ts, 3)             AS iso_yearweek,  -- e.g. 202526
+    MIN(DATE(sample_ts))               AS week_start,
+    SUM(steps)                         AS total_steps,
+    SUM(energy_wh)                     AS energy_wh,
+    AVG(voltage_v)                     AS avg_voltage_v,
+    AVG(current_a)                     AS avg_current_a
+FROM raw_step_energy
+GROUP BY device_id, YEARWEEK(sample_ts, 3);
+
+/* ---- CALENDAR MONTH ---- */
+CREATE OR REPLACE VIEW monthly_energy AS
+SELECT
+    device_id,
+    DATE_FORMAT(sample_ts, '%Y‑%m')    AS month,         -- “2025‑07”
+    SUM(steps)                         AS total_steps,
+    SUM(energy_wh)                     AS energy_wh,
+    AVG(voltage_v)                     AS avg_voltage_v,
+    AVG(current_a)                     AS avg_current_a
+FROM raw_step_energy
+GROUP BY device_id, DATE_FORMAT(sample_ts, '%Y‑%m');
