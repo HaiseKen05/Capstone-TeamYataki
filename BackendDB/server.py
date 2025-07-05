@@ -7,6 +7,8 @@ from flask import Flask, request, jsonify, render_template_string, redirect, url
 from flask import make_response
 from functools import wraps
 from flask import redirect, session, url_for
+from flask import render_template
+
 
 # RBAC - Admin
 def admin_required(view_func):
