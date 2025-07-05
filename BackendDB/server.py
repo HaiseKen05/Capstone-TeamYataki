@@ -203,6 +203,7 @@ def add_log():
     except Exception as e:
         return f"<h3>Failed to log data: {e}</h3>", 500
 
+
 # Logout
 @app.route("/logout")
 def logout():
