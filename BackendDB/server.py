@@ -97,7 +97,7 @@ def user_home():
 
 
 # Admin Dashboard
-@app.route("/users", methods=["GET"])
+@app.route("/Administrator", methods=["GET"])
 @admin_required
 def list_users():
     users = User.query.all()
@@ -119,24 +119,20 @@ def list_users():
 def register_form():
     if request.method == "POST":
         data = request.form
-        
-        # Missing fields
+
+        # Validate required fields
         required_fields = ['name', 'role', 'username', 'email', 'password']
         if not all(field in data for field in required_fields):
             return "Missing fields", 400
-        
-        # Redirect if registered account is a user or admin
+
         if data['role'] not in ['Admin', 'User']:
-            return "Invalid role type", 400 
-        
-         # If a registered account is admin, directs to /users
-        if User.role == ['Admin']:
-            return redirect(url_for('/users'))
-        
-        # If registered name or email is taken
+            return "Invalid role type", 400
+
+        # Check for existing user
         if User.query.filter((User.username == data['username']) | (User.email == data['email'])).first():
             return "Username or email already exists", 409
 
+        # Create and save user
         hashed_pw = bcrypt.generate_password_hash(data['password']).decode('utf-8')
 
         new_user = User(
@@ -150,7 +146,16 @@ def register_form():
         db.session.add(new_user)
         db.session.commit()
 
-        return redirect(url_for('list_users'))
+        # Login the user to avoid redirect loop
+        session['user_id'] = new_user.id
+        session['username'] = new_user.username
+        session['role'] = new_user.role
+
+        # Redirect based on role
+        if new_user.role == 'Admin':
+            return redirect(url_for('list_users'))
+        elif new_user.role == 'User':
+            return redirect(url_for('user_home'))
 
     return render_template("register.html")
 
@@ -219,14 +224,11 @@ def sensor_dashboard():
         start_time = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     else:
         start_time = None
-
     if start_time:
         data = SensorData.query.filter(SensorData.datetime >= start_time).order_by(SensorData.datetime.desc()).all()
     else:
         data = SensorData.query.order_by(SensorData.datetime.desc()).all()
-
     return render_template("sensor_dashboard.html", sensor_data=data, filter=filter_type)
-
 
 
 # Logout
@@ -239,7 +241,6 @@ def logout():
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
     return response
-
 
 if __name__ == "__main__":
     app.run(debug=True)
