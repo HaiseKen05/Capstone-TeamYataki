@@ -21,6 +21,8 @@ class User(db.Model):
             "username": self.username,
             "email": self.email
         }
+        
+
 class SensorData(db.Model):
     __tablename__ = 'sensor_data'
 
