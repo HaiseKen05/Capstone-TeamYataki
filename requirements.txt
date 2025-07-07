@@ -1,0 +1,3 @@
+pip install flask
+pip install flask flask_sqlalchemy pymysql
+pip install flask-bcrypt
