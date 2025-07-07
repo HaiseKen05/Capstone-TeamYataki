@@ -243,6 +243,7 @@ def logout():
     return response
 
 # Adding metric calculation soon 
+# Remove Login feature???
 
 
 if __name__ == "__main__":
