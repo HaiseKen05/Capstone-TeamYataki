@@ -25,5 +25,11 @@ CREATE TABLE users (
     username VARCHAR(100),
     password VARCHAR(100),
 )
-
+CREATE TABLE sensor_data (
+  id int(11) NOT NULL,
+  steps int(11) DEFAULT NULL,
+  datetime datetime DEFAULT NULL,
+  raw_voltage float DEFAULT NULL,
+  raw_current float DEFAULT NULL
+)
 ????
