@@ -21,3 +21,4 @@ Capstone Thesis Repository
 # Product Description
 
 # System Description
+The system features metric calclulation to use as machine learning data for the regression model, ultimately predicting which month generates the most energy.
