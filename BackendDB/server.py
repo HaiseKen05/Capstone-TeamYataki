@@ -14,7 +14,7 @@ db.init_app(app)
 bcrypt = Bcrypt(app)
 
 @app.before_request
-def create_tables():
+def initialize_database():
     db.create_all()
 
 # Root → redirect to dashboard

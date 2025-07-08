@@ -81,7 +81,8 @@
             <table class="table table-striped table-bordered align-middle">
                 <thead class="table-primary">
                     <tr>
-                        <th>Date/Time</th>
+                        <th>Date</th>
+                        <th>Time</th>
                         <th>Voltage (V)</th>
                         <th>Current (A)</th>
                     </tr>
@@ -89,7 +90,8 @@
                 <tbody>
                     {% for row in sensor_data %}
                     <tr>
-                        <td>{{ row.datetime.strftime("%Y-%m-%d %H:%M") }}</td>
+                        <td>{{ row.datetime.strftime("%Y-%m-%d") }}</td>
+                        <td>{{ row.datetime.strftime("%H:%M") }}</td>
                         <td>{{ row.raw_voltage }}</td>
                         <td>{{ row.raw_current }}</td>
                     </tr>
