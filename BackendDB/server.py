@@ -7,6 +7,15 @@ import pandas as pd
 from sklearn.linear_model import LinearRegression
 import numpy as np
 from sqlalchemy import func
+import threading
+import time
+
+# --- Forecast Cache ---
+forecast_cache = {
+    "voltage": None,
+    "current": None,
+    "date": None  # The date the forecast was last updated
+}
 
 # --- Forecast Helper ---
 def prepare_daily_avg_data(field):
@@ -32,6 +41,35 @@ def prepare_daily_avg_data(field):
     y = df["avg_value"].values
 
     return X, y, df
+
+# --- Retraining Thread ---
+def retrain_forecast_models():
+    while True:
+        print("[Retrain Thread] Updating forecast cache...")
+        update_forecast_cache()
+        time.sleep(24 * 60 * 60)  # every 24 hours
+
+# --- Forecast Update Function ---
+def update_forecast_cache():
+    try:
+        Xv, yv, dfv = prepare_daily_avg_data("raw_voltage")
+        if Xv is not None:
+            model_v = LinearRegression()
+            model_v.fit(Xv, yv)
+            next_day = dfv["day_num"].max() + 1
+            forecast_cache["voltage"] = round(model_v.predict([[next_day]])[0], 2)
+
+        Xc, yc, dfc = prepare_daily_avg_data("raw_current")
+        if Xc is not None:
+            model_c = LinearRegression()
+            model_c.fit(Xc, yc)
+            next_day = dfc["day_num"].max() + 1
+            forecast_cache["current"] = round(model_c.predict([[next_day]])[0], 2)
+
+        forecast_cache["date"] = datetime.now().date()
+        print(f"[Retrain] Forecast updated for {forecast_cache['date']}")
+    except Exception as e:
+        print(f"[Retrain Error] {e}")
 
 # --- Flask App Initialization ---
 app = Flask(__name__)
@@ -65,6 +103,9 @@ def add_log():
         )
         db.session.add(new_log)
         db.session.commit()
+
+        # Force refresh of forecast on next dashboard access
+        forecast_cache["date"] = None
         return redirect(url_for("sensor_dashboard"))
     except Exception as e:
         return f"<h3>Failed to log data: {e}</h3>", 500
@@ -88,13 +129,13 @@ def sensor_dashboard():
         sensor_data = SensorData.query.filter(SensorData.datetime >= start_time).order_by(SensorData.datetime.desc()).all()
     else:
         sensor_data = SensorData.query.order_by(SensorData.datetime.desc()).all()
+
     forecast_date = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
 
     # --- Metrics ---
     total_steps = sum(d.steps for d in sensor_data)
     total_voltage = sum(d.raw_voltage for d in sensor_data)
     total_current = sum(d.raw_current for d in sensor_data)
-
     count = len(sensor_data) if sensor_data else 1
 
     avg_steps = total_steps / count
@@ -110,44 +151,33 @@ def sensor_dashboard():
     min_current = min((d.raw_current for d in sensor_data), default=0)
 
     # --- Forecasts ---
-    predicted_voltage = None
-    predicted_current = None
+    if forecast_cache["date"] != datetime.now().date():
+        update_forecast_cache()
 
-    Xv, yv, dfv = prepare_daily_avg_data("raw_voltage")
-    if Xv is not None and yv is not None:
-        model_v = LinearRegression()
-        model_v.fit(Xv, yv)
-        next_day_v = dfv["day_num"].max() + 1
-        predicted_voltage = round(model_v.predict([[next_day_v]])[0], 2)
+    predicted_voltage = forecast_cache["voltage"]
+    predicted_current = forecast_cache["current"]
 
-    Xc, yc, dfc = prepare_daily_avg_data("raw_current")
-    if Xc is not None and yc is not None:
-        model_c = LinearRegression()
-        model_c.fit(Xc, yc)
-        next_day_c = dfc["day_num"].max() + 1
-        predicted_current = round(model_c.predict([[next_day_c]])[0], 2)
-
-    # --- Render ---
     return render_template("sensor_dashboard.html",
-    sensor_data=sensor_data,
-    filter=filter_type,
-    total_steps=total_steps,
-    total_voltage=round(total_voltage, 2),
-    total_current=round(total_current, 2),
-    avg_steps=round(avg_steps, 2),
-    avg_voltage=round(avg_voltage, 2),
-    avg_current=round(avg_current, 2),
-    max_steps=max_steps,
-    max_voltage=max_voltage,
-    max_current=max_current,
-    min_steps=min_steps,
-    min_voltage=min_voltage,
-    min_current=min_current,
-    predicted_voltage=predicted_voltage,
-    predicted_current=predicted_current,
-    forecast_date=forecast_date  # ← Add this line
-)
+        sensor_data=sensor_data,
+        filter=filter_type,
+        forecast_date=forecast_date,
+        total_steps=total_steps,
+        total_voltage=round(total_voltage, 2),
+        total_current=round(total_current, 2),
+        avg_steps=round(avg_steps, 2),
+        avg_voltage=round(avg_voltage, 2),
+        avg_current=round(avg_current, 2),
+        max_steps=max_steps,
+        max_voltage=max_voltage,
+        max_current=max_current,
+        min_steps=min_steps,
+        min_voltage=min_voltage,
+        min_current=min_current,
+        predicted_voltage=predicted_voltage,
+        predicted_current=predicted_current
+    )
 
-# --- Run ---
+# --- Start Retraining Thread + Run App ---
 if __name__ == "__main__":
+    threading.Thread(target=retrain_forecast_models, daemon=True).start()
     app.run(host="0.0.0.0", debug=True)
