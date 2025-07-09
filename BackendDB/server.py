@@ -3,13 +3,43 @@ from flask_bcrypt import Bcrypt
 from config import SQLALCHEMY_DATABASE_URI, SQLALCHEMY_TRACK_MODIFICATIONS
 from models import db, SensorData
 from datetime import datetime, timedelta
+import pandas as pd
+from sklearn.linear_model import LinearRegression
+import numpy as np
+from sqlalchemy import func
 
+# --- Forecast Helper ---
+def prepare_daily_avg_data(field):
+    column = getattr(SensorData, field)
+    daily_data = (
+        db.session.query(
+            func.date(SensorData.datetime).label("date"),
+            func.avg(column).label("avg_value")
+        )
+        .group_by(func.date(SensorData.datetime))
+        .order_by(func.date(SensorData.datetime))
+        .all()
+    )
+
+    if not daily_data:
+        return None, None, None
+
+    df = pd.DataFrame(daily_data, columns=["date", "avg_value"])
+    df["date"] = pd.to_datetime(df["date"])
+    df["day_num"] = (df["date"] - df["date"].min()).dt.days
+
+    X = df["day_num"].values.reshape(-1, 1)
+    y = df["avg_value"].values
+
+    return X, y, df
+
+# --- Flask App Initialization ---
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = SQLALCHEMY_DATABASE_URI
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = SQLALCHEMY_TRACK_MODIFICATIONS
-app.secret_key = "your_super_secret_key"  # Still required by Flask for WTForms or flash if ever used
+app.secret_key = "your_super_secret_key"
 
-# Initialize DB and Bcrypt
+# --- Init DB and Bcrypt ---
 db.init_app(app)
 bcrypt = Bcrypt(app)
 
@@ -17,12 +47,12 @@ bcrypt = Bcrypt(app)
 def initialize_database():
     db.create_all()
 
-# Root → redirect to dashboard
+# --- Redirect Root ---
 @app.route("/")
 def index():
     return redirect(url_for("sensor_dashboard"))
 
-# Add sensor log
+# --- Add Sensor Log ---
 @app.route("/add-log", methods=["POST"])
 def add_log():
     try:
@@ -39,7 +69,7 @@ def add_log():
     except Exception as e:
         return f"<h3>Failed to log data: {e}</h3>", 500
 
-# View sensor dashboard with filter
+# --- Dashboard with Metrics and Forecast ---
 @app.route("/sensor-dashboard")
 def sensor_dashboard():
     filter_type = request.args.get("filter")
@@ -58,13 +88,14 @@ def sensor_dashboard():
         sensor_data = SensorData.query.filter(SensorData.datetime >= start_time).order_by(SensorData.datetime.desc()).all()
     else:
         sensor_data = SensorData.query.order_by(SensorData.datetime.desc()).all()
+    forecast_date = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
 
-    # Metric calculations
+    # --- Metrics ---
     total_steps = sum(d.steps for d in sensor_data)
     total_voltage = sum(d.raw_voltage for d in sensor_data)
     total_current = sum(d.raw_current for d in sensor_data)
 
-    count = len(sensor_data) if sensor_data else 1  # Avoid division by zero
+    count = len(sensor_data) if sensor_data else 1
 
     avg_steps = total_steps / count
     avg_voltage = total_voltage / count
@@ -78,23 +109,45 @@ def sensor_dashboard():
     min_voltage = min((d.raw_voltage for d in sensor_data), default=0)
     min_current = min((d.raw_current for d in sensor_data), default=0)
 
+    # --- Forecasts ---
+    predicted_voltage = None
+    predicted_current = None
+
+    Xv, yv, dfv = prepare_daily_avg_data("raw_voltage")
+    if Xv is not None and yv is not None:
+        model_v = LinearRegression()
+        model_v.fit(Xv, yv)
+        next_day_v = dfv["day_num"].max() + 1
+        predicted_voltage = round(model_v.predict([[next_day_v]])[0], 2)
+
+    Xc, yc, dfc = prepare_daily_avg_data("raw_current")
+    if Xc is not None and yc is not None:
+        model_c = LinearRegression()
+        model_c.fit(Xc, yc)
+        next_day_c = dfc["day_num"].max() + 1
+        predicted_current = round(model_c.predict([[next_day_c]])[0], 2)
+
+    # --- Render ---
     return render_template("sensor_dashboard.html",
-        sensor_data=sensor_data,
-        filter=filter_type,
-        total_steps=total_steps,
-        total_voltage=round(total_voltage, 2),
-        total_current=round(total_current, 2),
-        avg_steps=round(avg_steps, 2),
-        avg_voltage=round(avg_voltage, 2),
-        avg_current=round(avg_current, 2),
-        max_steps=max_steps,
-        max_voltage=max_voltage,
-        max_current=max_current,
-        min_steps=min_steps,
-        min_voltage=min_voltage,
-        min_current=min_current
-    )
+    sensor_data=sensor_data,
+    filter=filter_type,
+    total_steps=total_steps,
+    total_voltage=round(total_voltage, 2),
+    total_current=round(total_current, 2),
+    avg_steps=round(avg_steps, 2),
+    avg_voltage=round(avg_voltage, 2),
+    avg_current=round(avg_current, 2),
+    max_steps=max_steps,
+    max_voltage=max_voltage,
+    max_current=max_current,
+    min_steps=min_steps,
+    min_voltage=min_voltage,
+    min_current=min_current,
+    predicted_voltage=predicted_voltage,
+    predicted_current=predicted_current,
+    forecast_date=forecast_date  # ← Add this line
+)
 
-
+# --- Run ---
 if __name__ == "__main__":
     app.run(host="0.0.0.0", debug=True)

@@ -141,9 +141,18 @@
             </table>
         </div>
     </div>
-
-
-    <!-- Visual Charts -->
+{% if predicted_voltage is not none %}
+<div class="alert alert-info text-center">
+    <i class="bi bi-lightning-charge-fill"></i>
+    <strong>Forecasted Voltage for {{ forecast_date }}:</strong> {{ predicted_voltage }} V
+</div>
+{% endif %}
+{% if predicted_current is not none %}
+<div class="alert alert-warning text-center">
+    <i class="bi bi-lightning-fill"></i>
+    <strong>Forecasted Current for {{ forecast_date }}:</strong> {{ predicted_current }} A
+</div>
+{% endif %}
 
     <div></div>
 
