@@ -9,6 +9,7 @@ import numpy as np
 from sqlalchemy import func
 import threading
 import time
+from math import ceil
 
 # --- Forecast Cache ---
 forecast_cache = {
@@ -114,53 +115,82 @@ def add_log():
 @app.route("/sensor-dashboard")
 def sensor_dashboard():
     filter_type = request.args.get("filter")
+    month_filter = request.args.get("month")  # new
+    page = request.args.get("page", default=1, type=int)
+    per_page = 10
+
     now = datetime.now()
 
-    if filter_type == "day":
+    if month_filter:
+        try:
+            year, month = map(int, month_filter.split("-"))
+            start_time = datetime(year, month, 1)
+            if month == 12:
+                end_time = datetime(year + 1, 1, 1)
+            else:
+                end_time = datetime(year, month + 1, 1)
+        except ValueError:
+            start_time = None
+            end_time = None
+    elif filter_type == "day":
         start_time = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_time = None
     elif filter_type == "week":
         start_time = now - timedelta(days=now.weekday())
+        end_time = None
     elif filter_type == "month":
         start_time = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        end_time = None
     else:
         start_time = None
+        end_time = None
 
-    if start_time:
-        sensor_data = SensorData.query.filter(SensorData.datetime >= start_time).order_by(SensorData.datetime.desc()).all()
-    else:
-        sensor_data = SensorData.query.order_by(SensorData.datetime.desc()).all()
+    base_query = SensorData.query.order_by(SensorData.datetime.desc())
+    if start_time and end_time:
+        base_query = base_query.filter(SensorData.datetime >= start_time, SensorData.datetime < end_time)
+    elif start_time:
+        base_query = base_query.filter(SensorData.datetime >= start_time)
+
+    total_logs = base_query.count()
+    total_pages = ceil(total_logs / per_page)
+    sensor_data = base_query.offset((page - 1) * per_page).limit(per_page).all()
 
     forecast_date = (datetime.now() + timedelta(days=1)).strftime("%B %#d, %Y")
 
-    # --- Metrics ---
-    total_steps = sum(d.steps for d in sensor_data)
-    total_voltage = sum(d.raw_voltage for d in sensor_data)
-    total_current = sum(d.raw_current for d in sensor_data)
-    count = len(sensor_data) if sensor_data else 1
+    # Metrics (use filtered dataset)
+    all_data_for_metrics = base_query.all()
+    total_steps = sum(d.steps for d in all_data_for_metrics)
+    total_voltage = sum(d.raw_voltage for d in all_data_for_metrics)
+    total_current = sum(d.raw_current for d in all_data_for_metrics)
+    count = len(all_data_for_metrics) if all_data_for_metrics else 1
 
     avg_steps = total_steps / count
     avg_voltage = total_voltage / count
     avg_current = total_current / count
 
-    max_steps = max((d.steps for d in sensor_data), default=0)
-    max_voltage = max((d.raw_voltage for d in sensor_data), default=0)
-    max_current = max((d.raw_current for d in sensor_data), default=0)
+    max_steps = max((d.steps for d in all_data_for_metrics), default=0)
+    max_voltage = max((d.raw_voltage for d in all_data_for_metrics), default=0)
+    max_current = max((d.raw_current for d in all_data_for_metrics), default=0)
 
-    min_steps = min((d.steps for d in sensor_data), default=0)
-    min_voltage = min((d.raw_voltage for d in sensor_data), default=0)
-    min_current = min((d.raw_current for d in sensor_data), default=0)
+    min_steps = min((d.steps for d in all_data_for_metrics), default=0)
+    min_voltage = min((d.raw_voltage for d in all_data_for_metrics), default=0)
+    min_current = min((d.raw_current for d in all_data_for_metrics), default=0)
 
-    # --- Forecasts ---
     if forecast_cache["date"] != datetime.now().date():
         update_forecast_cache()
-
-    predicted_voltage = forecast_cache["voltage"]
-    predicted_current = forecast_cache["current"]
+    
+    chart_labels = [d.datetime.strftime("%B %#d, %Y %H:%M") for d in all_data_for_metrics]
+    voltage_data = [round(d.raw_voltage, 2) for d in all_data_for_metrics]
+    current_data = [round(d.raw_current, 2) for d in all_data_for_metrics]
+    steps_data = [d.steps for d in all_data_for_metrics]
 
     return render_template("sensor_dashboard.html",
         sensor_data=sensor_data,
         filter=filter_type,
+        month_filter=month_filter,
         forecast_date=forecast_date,
+        page=page,
+        total_pages=total_pages,
         total_steps=total_steps,
         total_voltage=round(total_voltage, 2),
         total_current=round(total_current, 2),
@@ -173,9 +203,14 @@ def sensor_dashboard():
         min_steps=min_steps,
         min_voltage=min_voltage,
         min_current=min_current,
-        predicted_voltage=predicted_voltage,
-        predicted_current=predicted_current
+        predicted_voltage=forecast_cache["voltage"],
+        predicted_current=forecast_cache["current"],
+        chart_labels=chart_labels,
+        voltage_data=voltage_data,
+        current_data=current_data,
+        steps_data=steps_data
     )
+
 
 # --- Start Retraining Thread + Run App ----
 if __name__ == "__main__":

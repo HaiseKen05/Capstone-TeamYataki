@@ -1,17 +1,16 @@
 <!DOCTYPE html>
 <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title>Sensor Data Dashboard</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <!-- Bootstrap 5 CSS -->
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+        <!-- Bootstrap Icons -->
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-<head>
-    <meta charset="UTF-8">
-    <title>Sensor Data Dashboard</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-
-    <!-- Bootstrap 5 CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Bootstrap Icons -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
-
-    <style>
+        <style>
         body {
             padding: 30px;
         }
@@ -44,154 +43,217 @@
         .modal-backdrop {
             z-index: 0 !important;
         }
-    </style>
-</head>
-
-<body>
-
-    <div class="container">
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <h2 class="mb-0"><i class="bi bi-graph-up-arrow"></i> Sensor Data Dashboard</h2>
-
-            <div class="d-flex gap-2 align-items-center">
-                <button class="btn btn-secondary" onclick="toggleDarkMode()">
-                    <i class="bi bi-moon-stars-fill"></i> Toggle Dark Mode
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2 class="mb-0">
+                    <i class="bi bi-graph-up-arrow"></i> Sensor Data Dashboard
+                </h2>
+                <div class="d-flex gap-2 align-items-center">
+                    <button class="btn btn-secondary" onclick="toggleDarkMode()">
+                        <i class="bi bi-moon-stars-fill"></i> Toggle Dark Mode
+                    </button>
+                </div>
+            </div>
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <button class="btn btn-primary"
+                        data-bs-toggle="modal"
+                        data-bs-target="#logModal">
+                    <i class="bi bi-plus-circle-fill"></i> Add Log Entry
                 </button>
+                <div class="d-flex align-items-center gap-2">
+                    <label for="month-picker" class="form-label fw-bold">Jump to Month:</label>
+                    <input type="month"
+                        id="month-picker"
+                        class="form-control w-auto"
+                        onchange="handleMonthFilter()"
+                        value="{{ month_filter }}">
+                </div>
+                <div>
+                    <label for="filter-select" class="form-label fw-bold me-2">Filter By:</label>
+                    <select id="filter-select"
+                            class="form-select d-inline-block w-auto"
+                            onchange="handleFilterChange()">
+                        <option value="">All</option>
+                        <option value="day" {% if filter=='day' %}selected{% endif %}>Today</option>
+                        <option value="week" {% if filter=='week' %}selected{% endif %}>This Week</option>
+                        <option value="month" {% if filter=='month' %}selected{% endif %}>This Month</option>
+                    </select>
+                </div>
+            </div>
+            <!-- Sensor Data Table -->
+            <div class="table-responsive mb-5">
+                <table class="table table-striped table-bordered align-middle">
+                    <thead class="table-primary">
+                        <tr>
+                            <th>Date</th>
+                            <th>Time</th>
+                            <th>Voltage (V)</th>
+                            <th>Current (A)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in sensor_data %}
+                            <tr>
+                                <td>{{ row.datetime.strftime("%B %#d, %Y") }}</td>
+                                <td>{{ row.datetime.strftime("%H:%M") }}</td>
+                                <td>{{ row.raw_voltage }}</td>
+                                <td>{{ row.raw_current }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                <!-- Pagination Controls -->
+                <nav aria-label="Sensor data pagination">
+                    <ul class="pagination justify-content-center">
+                        {% if page > 1 %}
+                            <li class="page-item">
+                                <a class="page-link"
+                                href="?page={{ page - 1 }}{% if filter %}&filter={{ filter }}{% endif %}">Previous</a>
+                            </li>
+                        {% endif %}
+                        {% for p in range(1, total_pages + 1) %}
+                            <li class="page-item {% if p == page %}active{% endif %}">
+                                <a class="page-link"
+                                href="?page={{ p }}{% if filter %}&filter={{ filter }}{% endif %}">{{ p
+                                }}</a>
+                            </li>
+                        {% endfor %}
+                        {% if page < total_pages %}
+                            <li class="page-item">
+                                <a class="page-link"
+                                href="?page={{ page + 1 }}{% if filter %}&filter={{ filter }}{% endif %}">Next</a>
+                            </li>
+                        {% endif %}
+                    </ul>
+                </nav>
+            </div>
+            <!-- Summary Metrics -->
+            <h4 class="mb-3">
+                <i class="bi bi-bar-chart-line-fill"></i> Summary Metrics
+            </h4>
+            <div class="table-responsive mb-5">
+                <table class="table table-bordered">
+                    <thead class="table-secondary">
+                        <tr>
+                            <th>Metric</th>
+                            <th>Steps</th>
+                            <th>Voltage (V)</th>
+                            <th>Current (A)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>
+                                <strong>Total</strong>
+                            </td>
+                            <td>{{ total_steps }}</td>
+                            <td>{{ total_voltage }}</td>
+                            <td>{{ total_current }}</td>
+                        </tr>
+                        <tr>
+                            <td>
+                                <strong>Average</strong>
+                            </td>
+                            <td>{{ avg_steps }}</td>
+                            <td>{{ avg_voltage }}</td>
+                            <td>{{ avg_current }}</td>
+                        </tr>
+                        <tr>
+                            <td>
+                                <strong>Maximum</strong>
+                            </td>
+                            <td>{{ max_steps }}</td>
+                            <td>{{ max_voltage }}</td>
+                            <td>{{ max_current }}</td>
+                        </tr>
+                        <tr>
+                            <td>
+                                <strong>Minimum</strong>
+                            </td>
+                            <td>{{ min_steps }}</td>
+                            <td>{{ min_voltage }}</td>
+                            <td>{{ min_current }}</td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
         </div>
+        {% if predicted_voltage is not none %}
+            <div class="alert alert-info text-center">
+                <i class="bi bi-lightning-charge-fill"></i>
+                <strong>Forecasted Voltage for {{ forecast_date }}:</strong> {{ predicted_voltage }} V
+            </div>
+        {% endif %}
+        {% if predicted_current is not none %}
+            <div class="alert alert-warning text-center">
+                <i class="bi bi-lightning-fill"></i>
+                <strong>Forecasted Current for {{ forecast_date }}:</strong> {{ predicted_current }} A
+            </div>
+        {% endif %}
 
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#logModal">
-                <i class="bi bi-plus-circle-fill"></i> Add Log Entry
-            </button>
+        <h4 class="mb-3"><i class="bi bi-graph-up"></i> Visual Insights</h4>
+            <div class="mb-5">
+                <canvas id="lineChart" height="100"></canvas>
+            </div>
+        <div class="mb-5">
+            <canvas id="barChart" height="100"></canvas>
+        </div>
 
-            <div>
-                <label for="filter-select" class="form-label fw-bold me-2">Filter By:</label>
-                <select id="filter-select" class="form-select d-inline-block w-auto" onchange="handleFilterChange()">
-                    <option value="">All</option>
-                    <option value="day" {% if filter=='day' %}selected{% endif %}>Today</option>
-                    <option value="week" {% if filter=='week' %}selected{% endif %}>This Week</option>
-                    <option value="month" {% if filter=='month' %}selected{% endif %}>This Month</option>
-                </select>
+        <!-- Modal: Add Log Entry -->
+        <div class="modal fade"
+            id="logModal"
+            tabindex="-1"
+            aria-labelledby="logModalLabel"
+            aria-hidden="true">
+            <div class="modal-dialog">
+                <form method="POST" action="/add-log" class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="logModalLabel">
+                            <i class="bi bi-journal-plus"></i> Add Sensor Log
+                        </h5>
+                        <button type="button"
+                                class="btn-close"
+                                data-bs-dismiss="modal"
+                                aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label">Steps</label>
+                            <input type="number" name="steps" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Date & Time</label>
+                            <input type="datetime-local" name="datetime" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Raw Voltage</label>
+                            <input type="number"
+                                step="any"
+                                name="raw_voltage"
+                                class="form-control"
+                                required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Raw Current</label>
+                            <input type="number"
+                                step="any"
+                                name="raw_current"
+                                class="form-control"
+                                required>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="submit" class="btn btn-success w-100">Submit</button>
+                    </div>
+                </form>
             </div>
         </div>
-
-        <!-- Sensor Data Table -->
-        <div class="table-responsive mb-5">
-            <table class="table table-striped table-bordered align-middle">
-                <thead class="table-primary">
-                    <tr>
-                        <th>Date</th>
-                        <th>Time</th>
-                        <th>Voltage (V)</th>
-                        <th>Current (A)</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for row in sensor_data %}
-                    <tr>
-                        <td>{{ row.datetime.strftime("%B %#d, %Y") }}</td>
-                        <td>{{ row.datetime.strftime("%H:%M") }}</td>
-                        <td>{{ row.raw_voltage }}</td>
-                        <td>{{ row.raw_current }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-
-        <!-- Summary Metrics -->
-        <h4 class="mb-3"><i class="bi bi-bar-chart-line-fill"></i> Summary Metrics</h4>
-        <div class="table-responsive mb-5">
-            <table class="table table-bordered">
-                <thead class="table-secondary">
-                    <tr>
-                        <th>Metric</th>
-                        <th>Steps</th>
-                        <th>Voltage (V)</th>
-                        <th>Current (A)</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td><strong>Total</strong></td>
-                        <td>{{ total_steps }}</td>
-                        <td>{{ total_voltage }}</td>
-                        <td>{{ total_current }}</td>
-                    </tr>
-                    <tr>
-                        <td><strong>Average</strong></td>
-                        <td>{{ avg_steps }}</td>
-                        <td>{{ avg_voltage }}</td>
-                        <td>{{ avg_current }}</td>
-                    </tr>
-                    <tr>
-                        <td><strong>Maximum</strong></td>
-                        <td>{{ max_steps }}</td>
-                        <td>{{ max_voltage }}</td>
-                        <td>{{ max_current }}</td>
-                    </tr>
-                    <tr>
-                        <td><strong>Minimum</strong></td>
-                        <td>{{ min_steps }}</td>
-                        <td>{{ min_voltage }}</td>
-                        <td>{{ min_current }}</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-    </div>
-{% if predicted_voltage is not none %}
-<div class="alert alert-info text-center">
-    <i class="bi bi-lightning-charge-fill"></i>
-    <strong>Forecasted Voltage for {{ forecast_date }}:</strong> {{ predicted_voltage }} V
-</div>
-{% endif %}
-{% if predicted_current is not none %}
-<div class="alert alert-warning text-center">
-    <i class="bi bi-lightning-fill"></i>
-    <strong>Forecasted Current for {{ forecast_date }}:</strong> {{ predicted_current }} A
-</div>
-{% endif %}
-
-    <div></div>
-
-    <!-- Modal: Add Log Entry -->
-    <div class="modal fade" id="logModal" tabindex="-1" aria-labelledby="logModalLabel" aria-hidden="true">
-        <div class="modal-dialog">
-            <form method="POST" action="/add-log" class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="logModalLabel"><i class="bi bi-journal-plus"></i> Add Sensor Log</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label class="form-label">Steps</label>
-                        <input type="number" name="steps" class="form-control" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Date & Time</label>
-                        <input type="datetime-local" name="datetime" class="form-control" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Raw Voltage</label>
-                        <input type="number" step="any" name="raw_voltage" class="form-control" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Raw Current</label>
-                        <input type="number" step="any" name="raw_current" class="form-control" required>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="submit" class="btn btn-success w-100">Submit</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Scripts -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
+        <!-- Scripts -->
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+        <script>
         function handleFilterChange() {
             const selected = document.getElementById("filter-select").value;
             window.location.href = selected ? `/sensor-dashboard?filter=${selected}` : '/sensor-dashboard';
@@ -200,8 +262,91 @@
         function toggleDarkMode() {
             document.body.classList.toggle("dark-mode");
         }
-    </script>
 
-</body>
+            function handleMonthFilter() {
+        const month = document.getElementById("month-picker").value;
+        if (month) {
+            window.location.href = `/sensor-dashboard?month=${month}`;
+            }
+        }
 
+            const labels = {{ chart_labels | tojson }};
+    const voltageData = {{ voltage_data | tojson }};
+    const currentData = {{ current_data | tojson }};
+    const stepsData = {{ steps_data | tojson }};
+
+    // Line Chart for Voltage & Current
+    new Chart(document.getElementById('lineChart'), {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Voltage (V)',
+                    data: voltageData,
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    fill: false,
+                    tension: 0.1
+                },
+                {
+                    label: 'Current (A)',
+                    data: currentData,
+                    borderColor: 'rgba(255, 99, 132, 1)',
+                    fill: false,
+                    tension: 0.1
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    position: 'top',
+                },
+                title: {
+                    display: true,
+                    text: 'Voltage and Current Over Time'
+                }
+            },
+            scales: {
+                x: {
+                    ticks: {
+                        maxRotation: 45,
+                        minRotation: 45
+                    }
+                }
+            }
+        }
+    });
+
+    // Bar Chart for Steps
+    new Chart(document.getElementById('barChart'), {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Steps',
+                data: stepsData,
+                backgroundColor: 'rgba(255, 206, 86, 0.7)',
+                borderColor: 'rgba(255, 206, 86, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Steps per Log Entry'
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+        </script>
+    </body>
 </html>
