@@ -90,7 +90,7 @@
                 <tbody>
                     {% for row in sensor_data %}
                     <tr>
-                        <td>{{ row.datetime.strftime("%Y-%m-%d") }}</td>
+                        <td>{{ row.datetime.strftime("%B %#d, %Y") }}</td>
                         <td>{{ row.datetime.strftime("%H:%M") }}</td>
                         <td>{{ row.raw_voltage }}</td>
                         <td>{{ row.raw_current }}</td>

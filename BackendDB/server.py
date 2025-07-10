@@ -130,7 +130,7 @@ def sensor_dashboard():
     else:
         sensor_data = SensorData.query.order_by(SensorData.datetime.desc()).all()
 
-    forecast_date = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+    forecast_date = (datetime.now() + timedelta(days=1)).strftime("%B %#d, %Y")
 
     # --- Metrics ---
     total_steps = sum(d.steps for d in sensor_data)
