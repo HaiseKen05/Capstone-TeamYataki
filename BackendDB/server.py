@@ -177,7 +177,7 @@ def sensor_dashboard():
         predicted_current=predicted_current
     )
 
-# --- Start Retraining Thread + Run App ---
+# --- Start Retraining Thread + Run App ----
 if __name__ == "__main__":
     threading.Thread(target=retrain_forecast_models, daemon=True).start()
     app.run(host="0.0.0.0", debug=True)
