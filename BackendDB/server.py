@@ -43,6 +43,44 @@ def prepare_daily_avg_data(field):
 
     return X, y, df
 
+# --- Predict Highest Month Helper ---
+def predict_highest_month(field):
+    column = getattr(SensorData, field)
+    monthly_data = (
+        db.session.query(
+            func.date_format(SensorData.datetime, "%Y-%m-01").label("month"),
+            func.avg(column).label("avg_value")
+        )
+        .group_by(func.date_format(SensorData.datetime, "%Y-%m-01"))
+        .order_by(func.date_format(SensorData.datetime, "%Y-%m-01"))
+        .all()
+    )
+
+    if len(monthly_data) < 2:
+        return None, None
+
+    df = pd.DataFrame(monthly_data, columns=["month", "avg_value"])
+    df["month"] = pd.to_datetime(df["month"])
+    df["month_num"] = (df["month"].dt.year - df["month"].dt.year.min()) * 12 + df["month"].dt.month
+
+    X = df["month_num"].values.reshape(-1, 1)
+    y = df["avg_value"].values
+
+    model = LinearRegression()
+    model.fit(X, y)
+
+    future_months = [df["month_num"].max() + i for i in range(1, 13)]
+    predicted_values = model.predict(np.array(future_months).reshape(-1, 1))
+
+    start_month = df["month"].min()
+    predicted_dates = [start_month + pd.DateOffset(months=int(m - df["month_num"].min())) for m in future_months]
+    best_month_index = np.argmax(predicted_values)
+
+    best_month = predicted_dates[best_month_index]
+    best_value = predicted_values[best_month_index]
+
+    return best_month.strftime("%B %Y"), round(best_value, 2)
+
 # --- Retraining Thread ---
 def retrain_forecast_models():
     while True:
@@ -105,7 +143,6 @@ def add_log():
         db.session.add(new_log)
         db.session.commit()
 
-        # Force refresh of forecast on next dashboard access
         forecast_cache["date"] = None
         return redirect(url_for("sensor_dashboard"))
     except Exception as e:
@@ -115,7 +152,7 @@ def add_log():
 @app.route("/sensor-dashboard")
 def sensor_dashboard():
     filter_type = request.args.get("filter")
-    month_filter = request.args.get("month")  # new
+    month_filter = request.args.get("month")
     page = request.args.get("page", default=1, type=int)
     per_page = 10
 
@@ -125,13 +162,9 @@ def sensor_dashboard():
         try:
             year, month = map(int, month_filter.split("-"))
             start_time = datetime(year, month, 1)
-            if month == 12:
-                end_time = datetime(year + 1, 1, 1)
-            else:
-                end_time = datetime(year, month + 1, 1)
+            end_time = datetime(year + 1, 1, 1) if month == 12 else datetime(year, month + 1, 1)
         except ValueError:
-            start_time = None
-            end_time = None
+            start_time = end_time = None
     elif filter_type == "day":
         start_time = now.replace(hour=0, minute=0, second=0, microsecond=0)
         end_time = None
@@ -142,8 +175,7 @@ def sensor_dashboard():
         start_time = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         end_time = None
     else:
-        start_time = None
-        end_time = None
+        start_time = end_time = None
 
     base_query = SensorData.query.order_by(SensorData.datetime.desc())
     if start_time and end_time:
@@ -157,7 +189,6 @@ def sensor_dashboard():
 
     forecast_date = (datetime.now() + timedelta(days=1)).strftime("%B %#d, %Y")
 
-    # Metrics (use filtered dataset)
     all_data_for_metrics = base_query.all()
     total_steps = sum(d.steps for d in all_data_for_metrics)
     total_voltage = sum(d.raw_voltage for d in all_data_for_metrics)
@@ -178,11 +209,14 @@ def sensor_dashboard():
 
     if forecast_cache["date"] != datetime.now().date():
         update_forecast_cache()
-    
+
     chart_labels = [d.datetime.strftime("%B %#d, %Y %H:%M") for d in all_data_for_metrics]
     voltage_data = [round(d.raw_voltage, 2) for d in all_data_for_metrics]
     current_data = [round(d.raw_current, 2) for d in all_data_for_metrics]
     steps_data = [d.steps for d in all_data_for_metrics]
+
+    best_voltage_month, best_voltage_value = predict_highest_month("raw_voltage")
+    best_current_month, best_current_value = predict_highest_month("raw_current")
 
     return render_template("sensor_dashboard.html",
         sensor_data=sensor_data,
@@ -208,9 +242,12 @@ def sensor_dashboard():
         chart_labels=chart_labels,
         voltage_data=voltage_data,
         current_data=current_data,
-        steps_data=steps_data
+        steps_data=steps_data,
+        best_voltage_month=best_voltage_month,
+        best_voltage_value=best_voltage_value,
+        best_current_month=best_current_month,
+        best_current_value=best_current_value
     )
-
 
 # --- Start Retraining Thread + Run App ----
 if __name__ == "__main__":
