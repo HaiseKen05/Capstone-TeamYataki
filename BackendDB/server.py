@@ -1,3 +1,4 @@
+# --- Import Required Libraries ---
 from flask import Flask, request, render_template, redirect, url_for
 from flask_bcrypt import Bcrypt
 from config import SQLALCHEMY_DATABASE_URI, SQLALCHEMY_TRACK_MODIFICATIONS
@@ -11,15 +12,19 @@ import threading
 import time
 from math import ceil
 
-# --- Forecast Cache ---
+# --- Forecast Cache (In-Memory Storage for Predictions) ---
 forecast_cache = {
     "voltage": None,
     "current": None,
-    "date": None  # The date the forecast was last updated
+    "date": None  # Cache update timestamp (daily)
 }
 
-# --- Forecast Helper ---
+# --- Prepare Daily Average Data for Forecasting ---
 def prepare_daily_avg_data(field):
+    """
+    Prepares daily average data for the specified sensor field (e.g., 'raw_voltage').
+    Returns training features (X), target values (y), and a DataFrame with the processed data.
+    """
     column = getattr(SensorData, field)
     daily_data = (
         db.session.query(
@@ -36,15 +41,19 @@ def prepare_daily_avg_data(field):
 
     df = pd.DataFrame(daily_data, columns=["date", "avg_value"])
     df["date"] = pd.to_datetime(df["date"])
-    df["day_num"] = (df["date"] - df["date"].min()).dt.days
+    df["day_num"] = (df["date"] - df["date"].min()).dt.days  # Convert to numerical format
 
     X = df["day_num"].values.reshape(-1, 1)
     y = df["avg_value"].values
 
     return X, y, df
 
-# --- Predict Highest Month Helper ---
+# --- Predict Future Month with Highest Average for Given Field ---
 def predict_highest_month(field):
+    """
+    Trains a model to predict which future month will have the highest average value for a given sensor field.
+    Returns the best month (as "Month Year") and the predicted value.
+    """
     column = getattr(SensorData, field)
     monthly_data = (
         db.session.query(
@@ -69,9 +78,11 @@ def predict_highest_month(field):
     model = LinearRegression()
     model.fit(X, y)
 
+    # Predict for the next 12 months
     future_months = [df["month_num"].max() + i for i in range(1, 13)]
     predicted_values = model.predict(np.array(future_months).reshape(-1, 1))
 
+    # Convert numerical months back to datetime
     start_month = df["month"].min()
     predicted_dates = [start_month + pd.DateOffset(months=int(m - df["month_num"].min())) for m in future_months]
     best_month_index = np.argmax(predicted_values)
@@ -81,16 +92,23 @@ def predict_highest_month(field):
 
     return best_month.strftime("%B %Y"), round(best_value, 2)
 
-# --- Retraining Thread ---
+# --- Background Forecast Retraining Thread ---
 def retrain_forecast_models():
+    """
+    Background thread function that updates the forecast every 24 hours.
+    """
     while True:
         print("[Retrain Thread] Updating forecast cache...")
         update_forecast_cache()
-        time.sleep(24 * 60 * 60)  # every 24 hours
+        time.sleep(24 * 60 * 60)  # Repeat daily
 
-# --- Forecast Update Function ---
+# --- Forecast Model Update Function ---
 def update_forecast_cache():
+    """
+    Fits Linear Regression models on daily average voltage/current and updates the forecast cache.
+    """
     try:
+        # Voltage Forecast
         Xv, yv, dfv = prepare_daily_avg_data("raw_voltage")
         if Xv is not None:
             model_v = LinearRegression()
@@ -98,6 +116,7 @@ def update_forecast_cache():
             next_day = dfv["day_num"].max() + 1
             forecast_cache["voltage"] = round(model_v.predict([[next_day]])[0], 2)
 
+        # Current Forecast
         Xc, yc, dfc = prepare_daily_avg_data("raw_current")
         if Xc is not None:
             model_c = LinearRegression()
@@ -110,28 +129,35 @@ def update_forecast_cache():
     except Exception as e:
         print(f"[Retrain Error] {e}")
 
-# --- Flask App Initialization ---
+# --- Initialize Flask App ---
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = SQLALCHEMY_DATABASE_URI
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = SQLALCHEMY_TRACK_MODIFICATIONS
 app.secret_key = "your_super_secret_key"
 
-# --- Init DB and Bcrypt ---
+# --- Initialize Database and Bcrypt ---
 db.init_app(app)
 bcrypt = Bcrypt(app)
 
 @app.before_request
 def initialize_database():
+    """
+    Ensures the tables are created before each request (for development use).
+    """
     db.create_all()
 
-# --- Redirect Root ---
+# --- Redirect Root to Sensor Dashboard ---
 @app.route("/")
 def index():
     return redirect(url_for("sensor_dashboard"))
 
-# --- Add Sensor Log ---
+# --- Add New Sensor Data Log ---
 @app.route("/add-log", methods=["POST"])
 def add_log():
+    """
+    Receives new sensor log data from form and stores it in the database.
+    Resets the forecast cache date to trigger update.
+    """
     try:
         data = request.form
         new_log = SensorData(
@@ -143,21 +169,28 @@ def add_log():
         db.session.add(new_log)
         db.session.commit()
 
-        forecast_cache["date"] = None
+        forecast_cache["date"] = None  # Invalidate forecast
         return redirect(url_for("sensor_dashboard"))
     except Exception as e:
         return f"<h3>Failed to log data: {e}</h3>", 500
 
-# --- Dashboard with Metrics and Forecast ---
+# --- Dashboard Page with Filtering, Metrics, Charts, and Forecast ---
 @app.route("/sensor-dashboard")
 def sensor_dashboard():
+    """
+    Displays the main dashboard with:
+    - Filtering (day/week/month/month-picker)
+    - Metrics (total/avg/min/max)
+    - Line charts for steps, voltage, current
+    - Forecasted values and best month predictions
+    """
     filter_type = request.args.get("filter")
     month_filter = request.args.get("month")
     page = request.args.get("page", default=1, type=int)
     per_page = 10
-
     now = datetime.now()
 
+    # --- Time Range Handling ---
     if month_filter:
         try:
             year, month = map(int, month_filter.split("-"))
@@ -169,7 +202,7 @@ def sensor_dashboard():
         start_time = now.replace(hour=0, minute=0, second=0, microsecond=0)
         end_time = None
     elif filter_type == "week":
-        start_time = now - timedelta(days=now.weekday())
+        start_time = now - timedelta(days=now.weekday())  # Start of week
         end_time = None
     elif filter_type == "month":
         start_time = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
@@ -177,6 +210,7 @@ def sensor_dashboard():
     else:
         start_time = end_time = None
 
+    # --- Query Sensor Data with Filters and Pagination ---
     base_query = SensorData.query.order_by(SensorData.datetime.desc())
     if start_time and end_time:
         base_query = base_query.filter(SensorData.datetime >= start_time, SensorData.datetime < end_time)
@@ -187,8 +221,7 @@ def sensor_dashboard():
     total_pages = ceil(total_logs / per_page)
     sensor_data = base_query.offset((page - 1) * per_page).limit(per_page).all()
 
-    forecast_date = (datetime.now() + timedelta(days=1)).strftime("%B %#d, %Y")
-
+    # --- Compute Metrics ---
     all_data_for_metrics = base_query.all()
     total_steps = sum(d.steps for d in all_data_for_metrics)
     total_voltage = sum(d.raw_voltage for d in all_data_for_metrics)
@@ -207,17 +240,23 @@ def sensor_dashboard():
     min_voltage = min((d.raw_voltage for d in all_data_for_metrics), default=0)
     min_current = min((d.raw_current for d in all_data_for_metrics), default=0)
 
+    # --- Update Forecast if Needed ---
     if forecast_cache["date"] != datetime.now().date():
         update_forecast_cache()
 
+    forecast_date = (datetime.now() + timedelta(days=1)).strftime("%B %#d, %Y")
+
+    # --- Prepare Chart Data ---
     chart_labels = [d.datetime.strftime("%B %#d, %Y %H:%M") for d in all_data_for_metrics]
     voltage_data = [round(d.raw_voltage, 2) for d in all_data_for_metrics]
     current_data = [round(d.raw_current, 2) for d in all_data_for_metrics]
     steps_data = [d.steps for d in all_data_for_metrics]
 
+    # --- Predict Best Months ---
     best_voltage_month, best_voltage_value = predict_highest_month("raw_voltage")
     best_current_month, best_current_value = predict_highest_month("raw_current")
 
+    # --- Render Dashboard Template ---
     return render_template("sensor_dashboard.html",
         sensor_data=sensor_data,
         filter=filter_type,
@@ -249,7 +288,7 @@ def sensor_dashboard():
         best_current_value=best_current_value
     )
 
-# --- Start Retraining Thread + Run App ----
+# --- Start App with Forecast Thread ---
 if __name__ == "__main__":
-    threading.Thread(target=retrain_forecast_models, daemon=True).start()
-    app.run(host="0.0.0.0", debug=True)
+    threading.Thread(target=retrain_forecast_models, daemon=True).start()  # Start retraining in background
+    app.run(host="0.0.0.0", debug=True)  # Run app on all interfaces
