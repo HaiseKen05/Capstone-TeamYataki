@@ -11,6 +11,20 @@ from sqlalchemy import func
 import threading
 import time
 from math import ceil
+from flask import session, flash
+from models import db, SensorData, User
+from functools import wraps
+
+
+
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if "user_id" not in session:
+            flash("Login required", "danger")
+            return redirect(url_for("login"))
+        return f(*args, **kwargs)
+    return decorated_function
 
 # --- Forecast Cache (In-Memory Storage for Predictions) ---
 forecast_cache = {
@@ -139,6 +153,25 @@ app.secret_key = "your_super_secret_key"
 db.init_app(app)
 bcrypt = Bcrypt(app)
 
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "POST":
+        username = request.form["username"]
+        password = request.form["password"]
+        user = User.query.filter_by(username=username).first()
+        if user and user.check_password(password):
+            session["user_id"] = user.id
+            return redirect(url_for("sensor_dashboard"))
+        flash("Invalid credentials", "danger")
+    return render_template("login.html")
+
+@app.route("/logout")
+def logout():
+    session.pop("user_id", None)
+    flash("Logged out", "success")
+    return redirect(url_for("login"))
+
 @app.before_request
 def initialize_database():
     """
@@ -148,8 +181,36 @@ def initialize_database():
 
 # --- Redirect Root to Sensor Dashboard ---
 @app.route("/")
+@login_required
 def index():
     return redirect(url_for("sensor_dashboard"))
+
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    if request.method == "POST":
+        username = request.form["username"]
+        password = request.form["password"]
+        sudo_command = request.form["sudo_command"]
+
+        expected_command = '$sudo-apt: enable | acc | reg | "TRUE" / admin'
+        if sudo_command.strip() != expected_command:
+            return "<h3>Unauthorized: Admin command verification failed</h3>", 403
+
+        hashed_pw = bcrypt.generate_password_hash(password).decode("utf-8")
+
+        new_user = User(
+            name=None,
+            username=username,
+            password=hashed_pw,
+            role="Admin"
+        )
+        db.session.add(new_user)
+        db.session.commit()
+        return redirect(url_for("login"))
+
+    return render_template("register.html")
+
+
 
 # --- Add New Sensor Data Log ---
 @app.route("/add-log", methods=["POST"])
