@@ -14,6 +14,11 @@ from math import ceil
 from flask import session, flash
 from models import db, SensorData, User
 from functools import wraps
+from flask import send_file, request
+import csv
+import io
+from io import BytesIO, StringIO
+import calendar
 
 
 
@@ -210,8 +215,6 @@ def register():
 
     return render_template("register.html")
 
-
-
 # --- Add New Sensor Data Log ---
 @app.route("/add-log", methods=["POST"])
 def add_log():
@@ -234,6 +237,65 @@ def add_log():
         return redirect(url_for("sensor_dashboard"))
     except Exception as e:
         return f"<h3>Failed to log data: {e}</h3>", 500
+    
+@app.route('/download-csv')
+def download_csv():
+    start = request.args.get('start')  # e.g., 2024-07
+    end = request.args.get('end')      # e.g., 2024-12
+
+    if not start or not end:
+        return "Invalid date range", 400
+
+    try:
+        start_date = datetime.strptime(start, "%Y-%m")
+        end_date = datetime.strptime(end, "%Y-%m")
+    except ValueError:
+        return "Invalid date format", 400
+
+    if start_date > end_date:
+        return "Start month must be before end month", 400
+
+    # Get logs from database
+    logs = SensorData.query.filter(
+        SensorData.datetime >= start_date,
+        SensorData.datetime < (end_date.replace(day=28) + timedelta(days=4)).replace(day=1)
+    ).all()
+
+    # Write CSV as string first
+    string_buffer = StringIO()
+    writer = csv.writer(string_buffer)
+    writer.writerow(['ID', 'Steps', 'Raw Voltage', 'Raw Current', 'Datetime'])
+    for log in logs:
+        writer.writerow([
+            log.id,
+            log.steps,
+            log.raw_voltage,
+            log.raw_current,
+            log.datetime.strftime('%Y-%m-%d %H:%M:%S')
+        ])
+
+    # Convert to bytes
+    byte_buffer = BytesIO()
+    byte_buffer.write(string_buffer.getvalue().encode('utf-8'))
+    byte_buffer.seek(0)
+
+    # Create filename
+    start_month_name = calendar.month_name[start_date.month]
+    end_month_name = calendar.month_name[end_date.month]
+    year = start_date.year
+
+    if start_date.year == end_date.year and start_date.month == end_date.month:
+        filename = f"Sensor_Report({year}_{start_month_name}).csv"
+    else:
+        filename = f"Sensor_Report({year}_{start_month_name}-{end_month_name}).csv"
+
+    return send_file(
+        byte_buffer,
+        mimetype='text/csv',
+        as_attachment=True,
+        download_name=filename
+    )
+
 
 # --- Dashboard Page with Filtering, Metrics, Charts, and Forecast ---
 @app.route("/sensor-dashboard")
