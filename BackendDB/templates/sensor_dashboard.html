@@ -116,29 +116,6 @@
                 </select>
             </div>
         </div>
-
-        <!-- CUSTOM CSV EXPORT FORM -->
-        <div class="card mb-4">
-            <div class="card-body">
-                <h5 class="card-title">EXPORT CSV REPORT</h5>
-                <form id="customCsvForm" class="row g-3">
-                    <div class="col-md-5">
-                        <label for="startMonth" class="form-label">Start Month</label>
-                        <input type="month" class="form-control" id="startMonth" required>
-                    </div>
-                    <div class="col-md-5">
-                        <label for="endMonth" class="form-label">End Month</label>
-                        <input type="month" class="form-control" id="endMonth" required>
-                    </div>
-                    <div class="col-md-2 d-flex align-items-end">
-                        <button type="submit" class="btn btn-primary w-100">
-                            <i class="bi bi-download me-1"></i> Download
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-
 <!-- Summary Table -->
 <h4 class="mt-5">Daily Summary</h4>
     <table class="table table-striped">
@@ -183,9 +160,6 @@
     </ul>
 </nav>
 {% endif %}
-
-
-
         <!-- METRICS TABLE -->
         <h4 class="mb-3"><i class="bi bi-bar-chart-line-fill"></i> Summary Metrics</h4>
         <div class="table-responsive mb-5">
@@ -213,7 +187,6 @@
                 <h5 class="card-title mb-3">
                     <i class="bi bi-lightning-fill text-warning"></i> Highest Energy Generated on the Month of:
                 </h5>
-
                 <div class="row mb-3">
                     <div class="col-md-6">
                         <p><strong><i class="bi bi-battery-charging text-primary"></i> Best Voltage Month:</strong> {{ best_voltage_month or 'None' }}</p>
@@ -222,9 +195,7 @@
                         <p><strong><i class="bi bi-lightning-charge-fill text-warning"></i> Best Current Month:</strong> {{ best_current_month or 'None' }}</p>
                     </div>
                 </div>
-
                 <hr class="border-light">
-
                 <div class="row">
                     <div class="col-md-6">
                         <p><i class="bi bi-graph-up-arrow text-info"></i> Forecasted Voltage ({{ forecast_date }}): <strong>{{ forecast_voltage or 'None' }} V</strong></p>
@@ -238,6 +209,29 @@
             </div>
         </div>
 
+        <!-- CUSTOM CSV EXPORT FORM -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title">EXPORT CSV REPORT</h5>
+                <form id="customCsvForm" class="row g-3">
+                    <div class="col-md-5">
+                        <label for="startMonth" class="form-label">Start Month</label>
+                        <input type="month" class="form-control" id="startMonth" required>
+                    </div>
+                    <div class="col-md-5">
+                        <label for="endMonth" class="form-label">End Month</label>
+                        <input type="month" class="form-control" id="endMonth" required>
+                    </div>
+                    <div class="col-md-2 d-flex align-items-end">
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="bi bi-download me-1"></i> Download
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        
         <!-- MODAL: ADD LOG ENTRY -->
         <div class="modal fade" id="logModal" tabindex="-1" aria-labelledby="logModalLabel" aria-hidden="true">
             <div class="modal-dialog">

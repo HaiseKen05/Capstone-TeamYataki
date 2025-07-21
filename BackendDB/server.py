@@ -312,9 +312,9 @@ def download_csv():
     end_month_name = calendar.month_name[end_date.month]
     year = start_date.year
     filename = (
-        f"Sensor_Report({year}_{start_month_name}).csv"
+        f"Sensor_Data_Report({year}_{start_month_name}).csv"
         if start_date == end_date
-        else f"Sensor_Report({year}_{start_month_name}-{end_month_name}).csv"
+        else f"Sensor_Data_Report({year}_{start_month_name}-{end_month_name}).csv"
     )
 
     return send_file(
