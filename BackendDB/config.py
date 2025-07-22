@@ -6,7 +6,7 @@
 DB_USER = 'root'
 
 # MariaDB password (set accordingly; XAMPP default is often empty)
-DB_PASSWORD = 'Password123$$'
+DB_PASSWORD = ''
 
 # Host where MariaDB server is running (usually 'localhost' for local development)
 DB_HOST = 'localhost'
