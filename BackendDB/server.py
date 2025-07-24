@@ -337,6 +337,9 @@ def sensor_dashboard():
 
     now = datetime.now()
     per_page = 10
+    chart_page = request.args.get("chart_page", default=1, type=int)
+    chart_days_per_page = 7
+
 
     # --- Filters ---
     filter_type = request.args.get("filter")
@@ -427,6 +430,29 @@ def sensor_dashboard():
     # Show pagination controls only if more than one page exists
     show_summary_pagination = paginated_summary.total > per_page
 
+    chart_query = (
+        db.session.query(
+            func.date(SensorData.datetime).label('date'),
+            func.avg(SensorData.raw_voltage).label('avg_voltage'),
+            func.avg(SensorData.raw_current).label('avg_current'),
+            func.sum(SensorData.steps).label('total_steps')
+        )
+        .group_by(func.date(SensorData.datetime))
+        .order_by(func.date(SensorData.datetime).desc())
+    )
+
+    daily_aggregates = chart_query.all()
+    total_chart_pages = ceil(len(daily_aggregates) / chart_days_per_page)
+    start_idx = (chart_page - 1) * chart_days_per_page
+    end_idx = start_idx + chart_days_per_page
+
+    paginated_chart_data = daily_aggregates[start_idx:end_idx][::-1]  # Reverse to show oldest first
+
+    chart_labels = [d[0].strftime("%b %d") for d in paginated_chart_data]
+    voltage_chart = [round(d[1], 2) for d in paginated_chart_data]
+    current_chart = [round(d[2], 2) for d in paginated_chart_data]
+    steps_chart = [d[3] for d in paginated_chart_data]
+
     return render_template("sensor_dashboard.html",
         # Sensor logs and metrics
         sensor_data=sensor_data,
@@ -459,9 +485,11 @@ def sensor_dashboard():
 
         # Charts
         chart_labels=chart_labels,
-        voltage_data=voltage_data,
-        current_data=current_data,
-        steps_data=steps_data,
+        voltage_chart=voltage_chart,
+        current_chart=current_chart,
+        steps_chart=steps_chart,
+        chart_page=chart_page,
+        total_chart_pages=total_chart_pages,
 
         # Summary Table
         summary_data=summary_data,
@@ -469,7 +497,6 @@ def sensor_dashboard():
         total_summary_pages=total_summary_pages,
         show_summary_pagination=show_summary_pagination
     )
-
 
 # --- Main Entrypoint: Start Flask App & Forecast Thread ---
 if __name__ == "__main__":
