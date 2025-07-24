@@ -323,18 +323,10 @@ def download_csv():
         as_attachment=True,
         download_name=filename
     )
-
+    
 @app.route("/sensor-dashboard")
 @login_required
 def sensor_dashboard():
-    """
-    Main dashboard route:
-    - Displays filtered & paginated logs
-    - Displays summary table (date-wise sum of voltage, current, steps)
-    - Computes metrics (total, avg, min, max)
-    - Shows charts and forecasts
-    """
-
     now = datetime.now()
     per_page = 10
     chart_page = request.args.get("chart_page", default=1, type=int)
@@ -344,6 +336,7 @@ def sensor_dashboard():
     # --- Filters ---
     filter_type = request.args.get("filter")
     month_filter = request.args.get("month")
+    export_type = request.args.get("export")
     sensor_page = request.args.get("page", default=1, type=int)
     summary_page = request.args.get("summary_page", default=1, type=int)
 
@@ -367,52 +360,24 @@ def sensor_dashboard():
     else:
         start_time = end_time = None
 
-    # --- Sensor Logs (Paginated) ---
+    # --- Sensor Query ---
     sensor_query = SensorData.query.order_by(SensorData.datetime.desc())
     if start_time and end_time:
         sensor_query = sensor_query.filter(SensorData.datetime >= start_time, SensorData.datetime < end_time)
     elif start_time:
         sensor_query = sensor_query.filter(SensorData.datetime >= start_time)
 
-    total_sensor_logs = sensor_query.count()
-    total_sensor_pages = ceil(total_sensor_logs / per_page)
-    sensor_data = sensor_query.offset((sensor_page - 1) * per_page).limit(per_page).all()
+    # --- Export Sensor Data ---
+    if export_type == "sensor":
+        output = StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["ID", "Datetime", "Steps", "Voltage", "Current"])
+        for row in sensor_query.all():
+            writer.writerow([row.id, row.datetime, row.steps, row.raw_voltage, row.raw_current])
+        output.seek(0)
+        return send_file(output, mimetype='text/csv', as_attachment=True, download_name='sensor_logs.csv')
 
-    # --- Metrics ---
-    all_data = sensor_query.all()
-    count = len(all_data) or 1
-    total_steps = sum(d.steps for d in all_data)
-    total_voltage = sum(d.raw_voltage for d in all_data)
-    total_current = sum(d.raw_current for d in all_data)
-
-    avg_steps = total_steps / count
-    avg_voltage = total_voltage / count
-    avg_current = total_current / count
-
-    max_steps = max((d.steps for d in all_data), default=0)
-    max_voltage = max((d.raw_voltage for d in all_data), default=0)
-    max_current = max((d.raw_current for d in all_data), default=0)
-
-    min_steps = min((d.steps for d in all_data), default=0)
-    min_voltage = min((d.raw_voltage for d in all_data), default=0)
-    min_current = min((d.raw_current for d in all_data), default=0)
-
-    # --- Forecast Updates ---
-    if forecast_cache["date"] != datetime.now().date():
-        update_forecast_cache()
-    forecast_date = (datetime.now() + timedelta(days=1)).strftime("%B %#d, %Y")
-
-    # --- Chart Data ---
-    chart_labels = [d.datetime.strftime("%B %#d, %Y %H:%M") for d in all_data]
-    voltage_data = [round(d.raw_voltage, 2) for d in all_data]
-    current_data = [round(d.raw_current, 2) for d in all_data]
-    steps_data = [d.steps for d in all_data]
-
-    # --- Best Month Prediction ---
-    best_voltage_month, best_voltage_value = predict_highest_month("raw_voltage")
-    best_current_month, best_current_value = predict_highest_month("raw_current")
-
-    # --- Summary Table (Daily Aggregation) ---
+    # --- Summary Query (Unpaginated, used for export and metrics) ---
     summary_query = (
         db.session.query(
             func.date(SensorData.datetime).label('date'),
@@ -423,11 +388,65 @@ def sensor_dashboard():
         .group_by(func.date(SensorData.datetime))
         .order_by(func.date(SensorData.datetime).desc())
     )
+    if start_time and end_time:
+        summary_query = summary_query.filter(SensorData.datetime >= start_time, SensorData.datetime < end_time)
+    elif start_time:
+        summary_query = summary_query.filter(SensorData.datetime >= start_time)
+
+    # --- Export Summary Data ---
+    if export_type == "summary":
+        output = StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["Date", "Total Steps", "Total Voltage", "Total Current"])
+        for row in summary_query.all():
+            writer.writerow([row.date, row.total_steps, row.total_voltage, row.total_current])
+        output.seek(0)
+        return send_file(output, mimetype='text/csv', as_attachment=True, download_name='summary_logs.csv')
+
+    # --- Paginate Sensor Logs ---
+    total_sensor_logs = sensor_query.count()
+    total_sensor_pages = ceil(total_sensor_logs / per_page)
+    sensor_data = sensor_query.offset((sensor_page - 1) * per_page).limit(per_page).all()
+
+    # --- Metrics from summary not individual rows ---
+    summary_data_all = summary_query.all()
+    count = len(summary_data_all) or 1
+
+    total_steps = sum(d.total_steps for d in summary_data_all)
+    total_voltage = sum(d.total_voltage for d in summary_data_all)
+    total_current = sum(d.total_current for d in summary_data_all)
+
+    avg_steps = total_steps / count
+    avg_voltage = total_voltage / count
+    avg_current = total_current / count
+
+    max_steps = max((d.total_steps for d in summary_data_all), default=0)
+    max_voltage = max((d.total_voltage for d in summary_data_all), default=0)
+    max_current = max((d.total_current for d in summary_data_all), default=0)
+
+    min_steps = min((d.total_steps for d in summary_data_all), default=0)
+    min_voltage = min((d.total_voltage for d in summary_data_all), default=0)
+    min_current = min((d.total_current for d in summary_data_all), default=0)
+
+    # --- Forecast Updates ---
+    if forecast_cache["date"] != datetime.now().date():
+        update_forecast_cache()
+    forecast_date = (datetime.now() + timedelta(days=1)).strftime("%B %#d, %Y")
+
+    # --- Chart Data ---
+    chart_labels = [d.datetime.strftime("%B %#d, %Y %H:%M") for d in sensor_query.all()]
+    voltage_data = [round(d.raw_voltage, 2) for d in sensor_query.all()]
+    current_data = [round(d.raw_current, 2) for d in sensor_query.all()]
+    steps_data = [d.steps for d in sensor_query.all()]
+
+    # --- Best Month Prediction ---
+    best_voltage_month, best_voltage_value = predict_highest_month("raw_voltage")
+    best_current_month, best_current_value = predict_highest_month("raw_current")
+
+    # --- Paginated Summary Table ---
     paginated_summary = summary_query.paginate(page=summary_page, per_page=per_page, error_out=False)
     summary_data = paginated_summary.items
     total_summary_pages = paginated_summary.pages
-
-    # Show pagination controls only if more than one page exists
     show_summary_pagination = paginated_summary.total > per_page
 
     chart_query = (
@@ -454,7 +473,6 @@ def sensor_dashboard():
     steps_chart = [d[3] for d in paginated_chart_data]
 
     return render_template("sensor_dashboard.html",
-        # Sensor logs and metrics
         sensor_data=sensor_data,
         page=sensor_page,
         total_pages=total_sensor_pages,
@@ -474,7 +492,6 @@ def sensor_dashboard():
         min_voltage=min_voltage,
         min_current=min_current,
 
-        # Forecast
         forecast_date=forecast_date,
         predicted_voltage=forecast_cache["voltage"],
         predicted_current=forecast_cache["current"],
@@ -483,7 +500,6 @@ def sensor_dashboard():
         best_current_month=best_current_month,
         best_current_value=best_current_value,
 
-        # Charts
         chart_labels=chart_labels,
         voltage_chart=voltage_chart,
         current_chart=current_chart,
@@ -491,12 +507,12 @@ def sensor_dashboard():
         chart_page=chart_page,
         total_chart_pages=total_chart_pages,
 
-        # Summary Table
         summary_data=summary_data,
         current_summary_page=summary_page,
         total_summary_pages=total_summary_pages,
         show_summary_pagination=show_summary_pagination
     )
+
 
 # --- Main Entrypoint: Start Flask App & Forecast Thread ---
 if __name__ == "__main__":

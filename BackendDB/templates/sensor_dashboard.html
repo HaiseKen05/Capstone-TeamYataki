@@ -162,22 +162,42 @@
         <!-- METRICS TABLE -->
         <h4 class="mb-3"><i class="bi bi-bar-chart-line-fill"></i> Summary Metrics</h4>
         <div class="table-responsive mb-5">
-            <table class="table table-bordered">
-                <thead class="table-secondary">
-                    <tr>
-                        <th>Metric</th>
-                        <th>Steps</th>
-                        <th>Voltage (V)</th>
-                        <th>Current (A)</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr><td><strong>Total</strong></td><td>{{ total_steps }}</td><td>{{ total_voltage }}</td><td>{{ total_current }}</td></tr>
-                    <tr><td><strong>Average</strong></td><td>{{ avg_steps }}</td><td>{{ avg_voltage }}</td><td>{{ avg_current }}</td></tr>
-                    <tr><td><strong>Maximum</strong></td><td>{{ max_steps }}</td><td>{{ max_voltage }}</td><td>{{ max_current }}</td></tr>
-                    <tr><td><strong>Minimum</strong></td><td>{{ min_steps }}</td><td>{{ min_voltage }}</td><td>{{ min_current }}</td></tr>
-                </tbody>
-            </table>
+<table class="table table-bordered">
+  <thead class="table-dark">
+    <tr>
+      <th>Metric</th>
+      <th>Steps</th>
+      <th>Voltage</th>
+      <th>Current</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Total</td>
+      <td>{{ total_steps }}</td>
+      <td>{{ total_voltage }}</td>
+      <td>{{ total_current }}</td>
+    </tr>
+    <tr>
+      <td>Average</td>
+      <td>{{ avg_steps }}</td>
+      <td>{{ avg_voltage }}</td>
+      <td>{{ avg_current }}</td>
+    </tr>
+    <tr>
+      <td>Maximum</td>
+      <td>{{ max_steps }}</td>
+      <td>{{ max_voltage }}</td>
+      <td>{{ max_current }}</td>
+    </tr>
+    <tr>
+      <td>Minimum</td>
+      <td>{{ min_steps }}</td>
+      <td>{{ min_voltage }}</td>
+      <td>{{ min_current }}</td>
+    </tr>
+  </tbody>
+</table>
         </div>
 
         <!-- FORECAST PANEL -->
