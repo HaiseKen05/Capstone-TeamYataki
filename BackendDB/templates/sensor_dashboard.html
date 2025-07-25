@@ -341,8 +341,8 @@
                 window.location.href = `/download-csv?start=${start}&end=${end}`;
             });
 
-        const ctx = document.getElementById('telemetryChart').getContext('2d');
-        const telemetryChart = new Chart(ctx, {
+            const ctx = document.getElementById('telemetryChart').getContext('2d');
+            const telemetryChart = new Chart(ctx, {
             type: 'line',
             data: {
                 labels: {{ chart_labels|tojson }},
