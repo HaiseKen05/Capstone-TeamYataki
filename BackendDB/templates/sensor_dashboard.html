@@ -115,6 +115,23 @@
                 </select>
             </div>
         </div>
+
+        <h5 class="mt-4">Telemetry Overview (7-Day Slice)</h5>
+            <canvas id="telemetryChart" height="100"></canvas>
+        <nav class="mt-3">
+            <ul class="pagination justify-content-center">
+        {% if chart_page > 1 %}
+        <li class="page-item">
+            <a class="page-link" href="{{ url_for('sensor_dashboard', chart_page=chart_page - 1) }}">&laquo; Previous</a>
+        </li>
+    {% endif %}
+    {% if chart_page < total_chart_pages %}
+        <li class="page-item">
+            <a class="page-link" href="{{ url_for('sensor_dashboard', chart_page=chart_page + 1) }}">Next &raquo;</a>
+        </li>
+    {% endif %}
+            </ul>
+        </nav>
 <!-- Summary Table -->
 <h4 class="mt-5">Daily Summary</h4>
     <table class="table table-striped">
@@ -218,7 +235,6 @@
                 <div class="row">
                     <div class="col-md-6">
                         <p><i class="bi bi-graph-up-arrow text-info"></i> Forecasted Voltage ({{ forecast_date }}): <strong>{{ forecast_voltage or 'None' }} V</strong></p>
-                        <p class="ps-4 text-muted">Predicted Voltage: <strong>{{ predicted_voltage or 'None' }} V</strong></p>
                     </div>
                     <div class="col-md-6">
                         <p><i class="bi bi-graph-up text-warning"></i> Forecasted Current ({{ forecast_date }}): <strong>{{ forecast_current or 'None' }} A</strong></p>
@@ -227,23 +243,6 @@
                 </div>
             </div>
         </div>
-
-        <h5 class="mt-4">Telemetry Overview (7-Day Slice)</h5>
-            <canvas id="telemetryChart" height="100"></canvas>
-        <nav class="mt-3">
-            <ul class="pagination justify-content-center">
-        {% if chart_page > 1 %}
-        <li class="page-item">
-            <a class="page-link" href="{{ url_for('sensor_dashboard', chart_page=chart_page - 1) }}">&laquo; Previous</a>
-        </li>
-    {% endif %}
-    {% if chart_page < total_chart_pages %}
-        <li class="page-item">
-            <a class="page-link" href="{{ url_for('sensor_dashboard', chart_page=chart_page + 1) }}">Next &raquo;</a>
-        </li>
-    {% endif %}
-            </ul>
-        </nav>
 
         <!-- CUSTOM CSV EXPORT FORM -->
         <div class="card mb-4">
