@@ -17,9 +17,10 @@ from math import ceil
 # ============================
 from flask import (
     Flask, request, render_template, redirect,
-    url_for, session, flash, send_file
+    url_for, session, flash, send_file, jsonify, 
 )
 from flask_bcrypt import Bcrypt
+from flask_cors import CORS
 import pandas as pd
 import numpy as np
 from sklearn.linear_model import LinearRegression
@@ -39,6 +40,7 @@ forecast_cache = {
     "current": None,
     "date": None
 }
+
 
 # ========================
 # === Flask App Setup  ===
@@ -169,7 +171,7 @@ def retrain_forecast_models():
     while True:
         update_forecast_cache()
         time.sleep(86400)  # 24 hours
-
+CORS(app)
 # =========================
 # === Authentication UI ===
 # =========================
@@ -229,6 +231,32 @@ def add_log():
         return redirect(url_for("sensor_dashboard"))
     except Exception as e:
         return f"<h3>Failed to log data: {e}</h3>", 500
+
+@app.route("/api/latest-logs")
+@login_required
+def latest_logs():
+    """
+    Returns latest 10 logs as JSON for dynamic frontend updates.
+    """
+    logs = (
+        SensorData.query.order_by(SensorData.datetime.desc())
+        .limit(10)
+        .all()
+    )
+    return {
+        "logs": [
+            {
+                "id": log.id,
+                "steps": log.steps,
+                "voltage": log.raw_voltage,
+                "current": log.raw_current,
+                "datetime": log.datetime.strftime("%Y-%m-%d %H:%M:%S")
+            } for log in logs
+        ]
+    }
+    
+
+
 
 @app.route("/download-csv")
 def download_csv():
