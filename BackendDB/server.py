@@ -1,5 +1,3 @@
-# Full refactored code with clean structure, developer-friendly annotations, and improved readability
-
 # ========================
 # === Standard Library ===
 # ========================
