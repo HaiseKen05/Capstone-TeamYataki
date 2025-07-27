@@ -192,7 +192,7 @@ def logout():
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if request.method == "POST":
-        if request.form["sudo_command"].strip() != '$sudo-apt: enable | acc | reg | "TRUE" / admin': // Temporary only and some fun adding Administrator Accounts
+        # if request.form["sudo_command"].strip() != '$sudo-apt: enable | acc | reg | "TRUE" / admin':  Temporary only and some fun adding Administrator Accounts
             return "<h3>Unauthorized: Admin command verification failed</h3>", 403
 
         hashed_pw = bcrypt.generate_password_hash(request.form["password"]).decode("utf-8")
