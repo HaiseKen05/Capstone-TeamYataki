@@ -534,6 +534,10 @@ def chart_data_api():
         "current_page": chart_page
     })
 
+@app.route("/ping", methods=["GET"])
+def ping():
+    return "Pong from server!", 200
+
 # ========================
 # === Run Flask App    ===
 # ========================
