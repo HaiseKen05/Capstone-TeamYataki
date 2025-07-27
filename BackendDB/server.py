@@ -502,6 +502,38 @@ def sensor_dashboard():
         show_summary_pagination=show_summary_pagination
     )
 
+@app.route("/api/chart-data")
+@login_required
+def chart_data_api():
+    chart_days_per_page = 7
+    chart_page = request.args.get("chart_page", 1, type=int)
+
+    chart_query = (
+        db.session.query(
+            func.date(SensorData.datetime).label('date'),
+            func.avg(SensorData.raw_voltage).label('avg_voltage'),
+            func.avg(SensorData.raw_current).label('avg_current'),
+            func.sum(SensorData.steps).label('total_steps')
+        )
+        .group_by(func.date(SensorData.datetime))
+        .order_by(func.date(SensorData.datetime).desc())
+    )
+
+    daily_aggregates = chart_query.all()
+    total_chart_pages = ceil(len(daily_aggregates) / chart_days_per_page)
+    paginated_chart_data = daily_aggregates[
+        (chart_page - 1) * chart_days_per_page : chart_page * chart_days_per_page
+    ][::-1]
+
+    return jsonify({
+        "labels": [d[0].strftime("%b %d") for d in paginated_chart_data],
+        "voltage": [round(d[1], 2) for d in paginated_chart_data],
+        "current": [round(d[2], 2) for d in paginated_chart_data],
+        "steps": [d[3] for d in paginated_chart_data],
+        "total_pages": total_chart_pages,
+        "current_page": chart_page
+    })
+
 # ========================
 # === Run Flask App    ===
 # ========================

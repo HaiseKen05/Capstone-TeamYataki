@@ -198,20 +198,8 @@
         <canvas id="telemetryChart" height="100"></canvas>
 
         <!-- Chart Pagination -->
-        <nav class="mt-3">
-            <ul class="pagination justify-content-center">
-                {% if chart_page > 1 %}
-                <li class="page-item">
-                    <a class="page-link" href="{{ url_for('sensor_dashboard', chart_page=chart_page - 1) }}">&laquo; Previous</a>
-                </li>
-                {% endif %}
-                {% if chart_page < total_chart_pages %}
-                <li class="page-item">
-                    <a class="page-link" href="{{ url_for('sensor_dashboard', chart_page=chart_page + 1) }}">Next &raquo;</a>
-                </li>
-                {% endif %}
-            </ul>
-        </nav>
+        <nav class="mt-3" id="chart-pagination-controls"></nav>
+
 
         <!-- CSV Export Form -->
         <div class="card mb-4">
@@ -341,6 +329,50 @@
                     }
                 }
             });
+            let currentChartPage = 1;
+const chart = telemetryChart;
+
+async function fetchChartData(page = 1) {
+    const response = await fetch(`/api/chart-data?chart_page=${page}`);
+    const data = await response.json();
+
+    chart.data.labels = data.labels;
+    chart.data.datasets[0].data = data.voltage;
+    chart.data.datasets[1].data = data.current;
+    chart.data.datasets[2].data = data.steps;
+    chart.update();
+
+    currentChartPage = data.current_page;
+    renderChartPagination(data.total_pages);
+}
+
+function renderChartPagination(totalPages) {
+    const container = document.getElementById("chart-pagination-controls");
+    let html = `<ul class="pagination justify-content-center">`;
+
+    if (currentChartPage > 1) {
+        html += `<li class="page-item"><button class="page-link" onclick="fetchChartData(${currentChartPage - 1})">&laquo; Prev</button></li>`;
+    }
+
+    for (let i = 1; i <= totalPages; i++) {
+        html += `
+        <li class="page-item ${i === currentChartPage ? 'active' : ''}">
+            <button class="page-link" onclick="fetchChartData(${i})">${i}</button>
+        </li>`;
+    }
+
+    if (currentChartPage < totalPages) {
+        html += `<li class="page-item"><button class="page-link" onclick="fetchChartData(${currentChartPage + 1})">Next &raquo;</button></li>`;
+    }
+
+    html += `</ul>`;
+    container.innerHTML = html;
+}
+
+// Initialize chart data from page 1
+window.addEventListener("DOMContentLoaded", () => {
+    fetchChartData(1);
+});
         </script>
     </div>
 </body>
