@@ -2,10 +2,10 @@
 #include <HTTPClient.h>
 #include <time.h>  // NTP time
 
-const char* ssid = "ESP32-AP";
-const char* password = "ESP32-Connect";
+const char* ssid = ""; // WIFI SSID
+const char* password = ""; // WIFI Password
 
-const char* serverURL = "http://192.168.254.116:5000/add-log";
+const char* serverURL = "http://0.0.0.1:5000/add-log"; // Change this to the appropriate Flask route
 
 const int buttonPin = 13;
 
