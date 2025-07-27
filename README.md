@@ -21,51 +21,57 @@ Capstone Thesis Repository
 # Product Description
 
 # **System Description**
-📊 Sensor Data Monitoring and Forecasting System
-The Sensor Data Monitoring and Forecasting System is a full-stack web application designed to capture, visualize, and forecast telemetry data from sensors, such as step counts, voltage, and current readings. Built using Flask, SQLAlchemy, and Chart.js, the system provides real-time insights through interactive dashboards and predictive analytics.
+# 📊 Sensor Data Monitoring and Forecasting System
 
-🔧 Key Features
-Sensor Data Logging: Securely ingest step count, raw voltage, and raw current data with timestamps.
+A full-stack Flask web application for logging, visualizing, and forecasting telemetry sensor data — including step counts, voltage, and current readings. The system includes a rich dashboard interface with interactive charts, exportable reports, user authentication, and built-in forecasting models using linear regression.
 
-User Authentication: Admin-only access with secure registration, login, and session-based authentication.
+---
 
-Dashboard Visualization:
+## 🚀 Features
 
-Summary tables with total, average, min, and max metrics
+### 🧾 Data Management
+- Add logs manually via the dashboard
+- Log fields: `steps`, `raw_voltage`, `raw_current`, `datetime`
+- API to retrieve latest logs as JSON
 
-Real-time line charts for telemetry over a 7-day rolling window
+### 📈 Dashboard and Visualization
+- Real-time charts (voltage, current, steps) with pagination
+- Summary tables with totals, averages, min/max values
+- Daily, weekly, monthly filters and custom month selection
 
-Pagination for sensor logs and chart data
+### 📉 Forecasting
+- Predict next day's voltage and current via linear regression
+- Identify the month with the highest predicted energy values
+- Background thread automatically updates forecasts daily
 
-Forecasting & Analytics:
+### 📦 Data Export
+- Export filtered sensor data or summary reports as `.csv`
+- Custom date range selection for export
 
-Predict future voltage and current using linear regression
+### 🔐 Authentication
+- Secure login and registration (Admin only)
+- Password hashing via `bcrypt`
+- Session-based route protection
 
-Identify the month with the highest predicted energy values
+### 🌓 Dark Mode Support
+- Toggle dark/light mode
+- Preference saved in browser `localStorage`
 
-Automatic daily cache refresh via background forecasting thread
+---
 
-Data Export:
+## 🛠️ Tech Stack
 
-Download filtered data or daily summaries as CSV files
+| Layer        | Technologies                          |
+|--------------|----------------------------------------|
+| **Backend**  | Python, Flask, SQLAlchemy, Pandas, scikit-learn |
+| **Frontend** | HTML5, Bootstrap 5, Jinja2, Chart.js   |
+| **Database** | SQLite / Any SQLAlchemy-compatible DB  |
+| **Security** | bcrypt, Flask Sessions                 |
 
-Custom month range selection for reports
+---
 
-Dark Mode UI: Responsive, user-friendly interface with persistent dark mode preference
+## 📂 Project Structure
 
-🧰 Technology Stack
-Backend: Python (Flask), SQLAlchemy, Pandas, Scikit-learn
-
-Frontend: HTML5, Bootstrap 5, Chart.js, Jinja2 templates
-
-Database: Relational schema managed via SQLAlchemy ORM
-
-Security: Password hashing (bcrypt), session control, route protection
-
-🧠 Use Cases
-Environmental or industrial sensor monitoring
-
-IoT energy tracking dashboards
 
 Educational tool for data science + web development integration
 
