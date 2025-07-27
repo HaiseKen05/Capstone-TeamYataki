@@ -1,16 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <!-- Page Metadata -->
     <meta charset="UTF-8">
     <title>Sensor Data Dashboard</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-
-    <!-- Bootstrap CSS and Icons -->
+    <!-- Bootstrap & Icons -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
-
-    <!-- Immediate Dark Mode Toggle on Page Load -->
+    <!-- Dark Mode & Styling -->
     <script>
         (function () {
             const isDark = localStorage.getItem("darkMode") === "true";
@@ -20,136 +17,140 @@
             }
         })();
     </script>
-
-    <!-- Dark Mode Styles and Layout Tweaks -->
     <style>
         body {
             padding: 30px;
+            transition: background-color 0.3s ease, color 0.3s ease;
         }
-
         body.dark-mode {
             background-color: #121212;
             color: #ffffff;
         }
-
         .dark-mode .table,
         .dark-mode .card {
-            color: #ffffff;
             background-color: #1e1e1e;
+            color: #fff;
             border-color: #444;
         }
-
-        .dark-mode .card-header,
         .dark-mode .form-control,
-        .dark-mode .form-select {
+        .dark-mode .form-select,
+        .dark-mode .card-header {
             background-color: #2c2c2c;
-            color: #ffffff;
             border-color: #444;
+            color: #fff;
         }
-
-        .dark-mode .form-control:focus,
-        .dark-mode .form-select:focus {
-            border-color: #666;
-        }
-
-        .dark-mode .table-striped > tbody > tr:nth-of-type(odd) {
-            background-color: #1e1e1e;
-        }
-
         .modal-backdrop {
             z-index: 0 !important;
         }
+        .card {
+            border-radius: 1rem;
+            box-shadow: 0 0.2rem 0.75rem rgba(0, 0, 0, 0.15);
+        }
+        .table th, .table td {
+            vertical-align: middle;
+        }
     </style>
 </head>
-
 <body style="visibility:hidden" onload="document.body.style.visibility='visible'">
-    <div class="container">
+<div class="container">
 
-        <!-- Header with Title and Controls -->
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <h2><i class="bi bi-graph-up-arrow"></i> Sensor Data Dashboard</h2>
-            <div class="d-flex gap-2">
-                <button class="btn btn-secondary" onclick="toggleDarkMode()">
-                    <i class="bi bi-moon-stars-fill"></i> Toggle Dark Mode
-                </button>
-                <a href="/logout" class="btn btn-outline-danger">
-                    <i class="bi bi-box-arrow-right"></i> Logout
-                </a>
-            </div>
-        </div>
-
-        <!-- Filter Controls: Add, Month Picker, Filter By -->
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#logModal">
-                <i class="bi bi-plus-circle-fill"></i> Add Log Entry
+    <!-- Header Section -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
+        <h2 class="mb-0"><i class="bi bi-graph-up-arrow me-2"></i>Sensor Data Dashboard</h2>
+        <div class="d-flex gap-2">
+            <button class="btn btn-secondary" onclick="toggleDarkMode()">
+                <i class="bi bi-moon-stars-fill me-1"></i> Toggle Dark Mode
             </button>
-
-            <div class="d-flex align-items-center gap-2">
-                <label for="month-picker" class="form-label fw-bold">Jump to Month:</label>
-                <input type="month" id="month-picker" class="form-control w-auto" onchange="handleMonthFilter()" value="{{ month_filter }}">
-            </div>
-
-            <div>
-                <label for="filter-select" class="form-label fw-bold me-2">Filter By:</label>
-                <select id="filter-select" class="form-select w-auto" onchange="handleFilterChange()">
-                    <option value="">All</option>
-                    <option value="day" {% if filter=='day' %}selected{% endif %}>Today</option>
-                    <option value="week" {% if filter=='week' %}selected{% endif %}>This Week</option>
-                    <option value="month" {% if filter=='month' %}selected{% endif %}>This Month</option>
-                </select>
+            <a href="/logout" class="btn btn-outline-danger">
+                <i class="bi bi-box-arrow-right me-1"></i> Logout
+            </a>
+        </div>
+    </div>
+    <!-- Filter Controls -->
+    <div class="card mb-4 p-3">
+        <div class="row g-3 align-items-center">
+            <div class="d-flex justify-content-between flex-wrap gap-3">
+                <div class="mt-2">
+                    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#logModal">
+                        <i class="bi bi-plus-circle-fill me-1"></i> Add Log Entry
+                    </button>
+                    </div>
+                        <div class="d-flex align-items-center gap-3 flex-wrap">
+                    <div>
+                        <label for="month-picker" class="form-label fw-bold mb-0 me-2">Jump to Month:</label>
+                        <input type="month" id="month-picker" class="form-control" onchange="handleMonthFilter()" value="{{ month_filter }}">
+                    </div>
+                    <div>
+                        <label for="filter-select" class="form-label fw-bold mb-0 me-2">Filter By:</label>
+                            <select id="filter-select" class="form-select" onchange="handleFilterChange()">
+                            <option value="">All</option>
+                            <option value="day" {% if filter=='day' %}selected{% endif %}>Today</option>
+                            <option value="week" {% if filter=='week' %}selected{% endif %}>This Week</option>
+                            <option value="month" {% if filter=='month' %}selected{% endif %}>This Month</option>
+                        </select>
+                    </div>
+                </div>
             </div>
         </div>
-
-        <!-- Daily Summary Table -->
-        <h4 class="mt-5">Daily Summary</h4>
-        <table class="table table-striped">
-            <thead>
-                <tr>
-                    <th>Date</th>
-                    <th>Total Voltage</th>
-                    <th>Total Current</th>
-                    <th>Total Steps</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for entry in summary_data %}
+    </div>
+    <!-- Daily Summary Table -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-calendar-week me-2"></i>Daily Summary</h5>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-striped mb-0">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Total Voltage</th>
+                        <th>Total Current</th>
+                        <th>Total Steps</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in summary_data %}
                     <tr>
                         <td>{{ entry.date.strftime('%Y-%m-%d') }}</td>
                         <td>{{ "%.2f"|format(entry.total_voltage) }}</td>
                         <td>{{ "%.2f"|format(entry.total_current) }}</td>
                         <td>{{ entry.total_steps }}</td>
                     </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-
-        <!-- Pagination for Summary Table -->
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
         {% if show_summary_pagination %}
-        <nav aria-label="Page navigation">
-            <ul class="pagination justify-content-center">
-                {% if current_summary_page > 1 %}
+        <div class="card-footer">
+            <nav aria-label="Page navigation">
+                <ul class="pagination justify-content-center mb-0">
+                    {% if current_summary_page > 1 %}
                     <li class="page-item">
                         <a class="page-link" href="{{ url_for('sensor_dashboard', summary_page=current_summary_page-1) }}">Previous</a>
                     </li>
-                {% endif %}
-                {% for page in range(1, total_summary_pages + 1) %}
+                    {% endif %}
+                    {% for page in range(1, total_summary_pages + 1) %}
                     <li class="page-item {% if page == current_summary_page %}active{% endif %}">
                         <a class="page-link" href="{{ url_for('sensor_dashboard', summary_page=page) }}">{{ page }}</a>
                     </li>
-                {% endfor %}
-                {% if current_summary_page < total_summary_pages %}
+                    {% endfor %}
+                    {% if current_summary_page < total_summary_pages %}
                     <li class="page-item">
                         <a class="page-link" href="{{ url_for('sensor_dashboard', summary_page=current_summary_page+1) }}">Next</a>
                     </li>
-                {% endif %}
-            </ul>
-        </nav>
+                    {% endif %}
+                </ul>
+            </nav>
+        </div>
         {% endif %}
-
-        <!-- Metrics Summary Table -->
-        <h4 class="mb-3"><i class="bi bi-bar-chart-line-fill"></i> Summary Metrics</h4>
-        <div class="table-responsive mb-5">
-            <table class="table table-bordered">
+    </div>
+    <!-- Summary Metrics -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-bar-chart-line-fill me-2"></i>Summary Metrics</h5>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-bordered mb-0">
                 <thead class="table-dark">
                     <tr>
                         <th>Metric</th>
@@ -166,214 +167,172 @@
                 </tbody>
             </table>
         </div>
-
-        <!-- Forecast Panel -->
-        <div class="card text-white bg-dark mb-4 shadow rounded-4 p-3">
-            <div class="card-body">
-                <h5 class="card-title mb-3">
-                    <i class="bi bi-lightning-fill text-warning"></i> Highest Energy Generated on the Month of:
-                </h5>
-                <div class="row mb-3">
-                    <div class="col-md-6">
-                        <p><strong><i class="bi bi-battery-charging text-primary"></i> Best Voltage Month:</strong> {{ best_voltage_month or 'None' }}</p>
-                    </div>
-                    <div class="col-md-6">
-                        <p><strong><i class="bi bi-lightning-charge-fill text-warning"></i> Best Current Month:</strong> {{ best_current_month or 'None' }}</p>
-                    </div>
-                </div>
-                <hr class="border-light">
-                <div class="row">
-                    <div class="col-md-6">
-                        <p><i class="bi bi-graph-up-arrow text-info"></i> Forecasted Voltage ({{ forecast_date }}): <strong>{{ forecast_voltage or 'None' }} V</strong></p>
-                    </div>
-                    <div class="col-md-6">
-                        <p><i class="bi bi-graph-up text-warning"></i> Forecasted Current ({{ forecast_date }}): <strong>{{ forecast_current or 'None' }} A</strong></p>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Telemetry Chart -->
-        <h5 class="mt-4">Telemetry Overview (7-Day Slice)</h5>
-        <canvas id="telemetryChart" height="100"></canvas>
-
-        <!-- Chart Pagination -->
-        <nav class="mt-3" id="chart-pagination-controls"></nav>
-
-
-        <!-- CSV Export Form -->
-        <div class="card mb-4">
-            <div class="card-body">
-                <h5 class="card-title">Export CSV Report</h5>
-                <form id="customCsvForm" class="row g-3">
-                    <div class="col-md-5">
-                        <label for="startMonth" class="form-label">Start Month</label>
-                        <input type="month" class="form-control" id="startMonth" required>
-                    </div>
-                    <div class="col-md-5">
-                        <label for="endMonth" class="form-label">End Month</label>
-                        <input type="month" class="form-control" id="endMonth" required>
-                    </div>
-                    <div class="col-md-2 d-flex align-items-end">
-                        <button type="submit" class="btn btn-primary w-100">
-                            <i class="bi bi-download me-1"></i> Download
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-
-        <!-- Add Log Modal -->
-        <div class="modal fade" id="logModal" tabindex="-1" aria-labelledby="logModalLabel" aria-hidden="true">
-            <div class="modal-dialog">
-                <form id="addLogForm" class="modal-content" method="POST" action="/add-log">
-                    <div class="modal-header">
-                        <h5 class="modal-title"><i class="bi bi-journal-plus"></i> Add Sensor Log</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body">
-                        <div class="mb-3"><label class="form-label">Steps</label><input type="number" name="steps" class="form-control" required></div>
-                        <div class="mb-3"><label class="form-label">Date & Time</label><input type="datetime-local" name="datetime" class="form-control" required></div>
-                        <div class="mb-3"><label class="form-label">Raw Voltage</label><input type="number" step="any" name="raw_voltage" class="form-control" required></div>
-                        <div class="mb-3"><label class="form-label">Raw Current</label><input type="number" step="any" name="raw_current" class="form-control" required></div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="submit" class="btn btn-success w-100">Submit</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-
-        <!-- Bootstrap & Chart Scripts -->
-        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-        <!-- Interactivity Scripts -->
-        <script>
-            function handleFilterChange() {
-                const selected = document.getElementById("filter-select").value;
-                window.location.href = selected ? `/sensor-dashboard?filter=${selected}` : '/sensor-dashboard';
-            }
-
-            function handleMonthFilter() {
-                const month = document.getElementById("month-picker").value;
-                if (month) window.location.href = `/sensor-dashboard?month=${month}`;
-            }
-
-            function toggleDarkMode() {
-                const isDark = !document.body.classList.contains("dark-mode");
-                document.body.classList.toggle("dark-mode", isDark);
-                document.documentElement.setAttribute("data-bs-theme", isDark ? "dark" : "light");
-                localStorage.setItem("darkMode", isDark);
-            }
-
-            // Apply dark mode on page load
-            function applyDarkModePreference() {
-                const isDark = localStorage.getItem("darkMode") === "true";
-                document.body.classList.toggle("dark-mode", isDark);
-                document.documentElement.setAttribute("data-bs-theme", isDark ? "dark" : "light");
-            }
-            applyDarkModePreference();
-
-            // CSV Form Submit
-            document.getElementById("customCsvForm").addEventListener("submit", function (e) {
-                e.preventDefault();
-                const start = document.getElementById("startMonth").value;
-                const end = document.getElementById("endMonth").value;
-
-                if (!start || !end || start > end) {
-                    alert("Please select a valid month range.");
-                    return;
-                }
-
-                window.location.href = `/download-csv?start=${start}&end=${end}`;
-            });
-
-            // Chart Rendering
-            const ctx = document.getElementById('telemetryChart').getContext('2d');
-            const telemetryChart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: {{ chart_labels|tojson }},
-                    datasets: [
-                        {
-                            label: 'Voltage (V)',
-                            data: {{ voltage_chart|tojson }},
-                            borderColor: 'rgba(255, 99, 132, 1)',
-                            fill: false
-                        },
-                        {
-                            label: 'Current (A)',
-                            data: {{ current_chart|tojson }},
-                            borderColor: 'rgba(54, 162, 235, 1)',
-                            fill: false
-                        },
-                        {
-                            label: 'Steps',
-                            data: {{ steps_chart|tojson }},
-                            borderColor: 'rgba(75, 192, 192, 1)',
-                            fill: false
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    plugins: {
-                        title: {
-                            display: true,
-                            text: 'Daily Telemetry Averages'
-                        }
-                    },
-                    scales: {
-                        y: { beginAtZero: true }
-                    }
-                }
-            });
-            let currentChartPage = 1;
-const chart = telemetryChart;
-
-async function fetchChartData(page = 1) {
-    const response = await fetch(`/api/chart-data?chart_page=${page}`);
-    const data = await response.json();
-
-    chart.data.labels = data.labels;
-    chart.data.datasets[0].data = data.voltage;
-    chart.data.datasets[1].data = data.current;
-    chart.data.datasets[2].data = data.steps;
-    chart.update();
-
-    currentChartPage = data.current_page;
-    renderChartPagination(data.total_pages);
-}
-
-function renderChartPagination(totalPages) {
-    const container = document.getElementById("chart-pagination-controls");
-    let html = `<ul class="pagination justify-content-center">`;
-
-    if (currentChartPage > 1) {
-        html += `<li class="page-item"><button class="page-link" onclick="fetchChartData(${currentChartPage - 1})">&laquo; Prev</button></li>`;
-    }
-
-    for (let i = 1; i <= totalPages; i++) {
-        html += `
-        <li class="page-item ${i === currentChartPage ? 'active' : ''}">
-            <button class="page-link" onclick="fetchChartData(${i})">${i}</button>
-        </li>`;
-    }
-
-    if (currentChartPage < totalPages) {
-        html += `<li class="page-item"><button class="page-link" onclick="fetchChartData(${currentChartPage + 1})">Next &raquo;</button></li>`;
-    }
-
-    html += `</ul>`;
-    container.innerHTML = html;
-}
-
-// Initialize chart data from page 1
-window.addEventListener("DOMContentLoaded", () => {
-    fetchChartData(1);
-});
-        </script>
     </div>
+    <!-- Forecast Section -->
+    <div class="card bg-dark text-light mb-4">
+        <div class="card-body">
+            <h5><i class="bi bi-lightning-fill text-warning me-2"></i>Highest Energy Generated (Monthly)</h5>
+            <div class="row mb-2">
+                <div class="col-md-6">
+                    <p><strong><i class="bi bi-battery-charging text-primary"></i> Best Voltage Month:</strong> {{ best_voltage_month or 'None' }}</p>
+                </div>
+                <div class="col-md-6">
+                    <p><strong><i class="bi bi-lightning-charge-fill text-warning"></i> Best Current Month:</strong> {{ best_current_month or 'None' }}</p>
+                </div>
+            </div>
+            <hr>
+            <div class="row">
+                <div class="col-md-6">
+                    <p><i class="bi bi-graph-up-arrow text-info"></i> Forecasted Voltage ({{ forecast_date }}): <strong>{{ forecast_voltage or 'None' }} V</strong></p>
+                </div>
+                <div class="col-md-6">
+                    <p><i class="bi bi-graph-up text-warning"></i> Forecasted Current ({{ forecast_date }}): <strong>{{ forecast_current or 'None' }} A</strong></p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Chart -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-activity me-2"></i>Telemetry Overview (7-Day Slice)</h5>
+        </div>
+        <div class="card-body">
+            <canvas id="telemetryChart" height="100"></canvas>
+            <nav class="mt-3" id="chart-pagination-controls"></nav>
+        </div>
+    </div>
+    <!-- CSV Export -->
+    <div class="card mb-5">
+        <div class="card-body">
+            <h5 class="card-title"><i class="bi bi-download me-2"></i>Export CSV Report</h5>
+            <form id="customCsvForm" class="row g-3">
+                <div class="col-md-5">
+                    <label for="startMonth" class="form-label">Start Month</label>
+                    <input type="month" class="form-control" id="startMonth" required>
+                </div>
+                <div class="col-md-5">
+                    <label for="endMonth" class="form-label">End Month</label>
+                    <input type="month" class="form-control" id="endMonth" required>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-download me-1"></i> Download
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <!-- Add Log Modal -->
+    <div class="modal fade" id="logModal" tabindex="-1" aria-labelledby="logModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <form id="addLogForm" class="modal-content" method="POST" action="/add-log">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-journal-plus me-2"></i>Add Sensor Log</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3"><label class="form-label">Steps</label><input type="number" name="steps" class="form-control" required></div>
+                    <div class="mb-3"><label class="form-label">Date & Time</label><input type="datetime-local" name="datetime" class="form-control" required></div>
+                    <div class="mb-3"><label class="form-label">Raw Voltage</label><input type="number" step="any" name="raw_voltage" class="form-control" required></div>
+                    <div class="mb-3"><label class="form-label">Raw Current</label><input type="number" step="any" name="raw_current" class="form-control" required></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-success w-100">Submit</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<!-- JS -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    function handleFilterChange() {
+        const selected = document.getElementById("filter-select").value;
+        window.location.href = selected ? `/sensor-dashboard?filter=${selected}` : '/sensor-dashboard';
+    }
+
+    function handleMonthFilter() {
+        const month = document.getElementById("month-picker").value;
+        if (month) window.location.href = `/sensor-dashboard?month=${month}`;
+    }
+    function toggleDarkMode() {
+        const isDark = !document.body.classList.contains("dark-mode");
+        document.body.classList.toggle("dark-mode", isDark);
+        document.documentElement.setAttribute("data-bs-theme", isDark ? "dark" : "light");
+        localStorage.setItem("darkMode", isDark);
+    }
+    document.getElementById("customCsvForm").addEventListener("submit", function (e) {
+        e.preventDefault();
+        const start = document.getElementById("startMonth").value;
+        const end = document.getElementById("endMonth").value;
+        if (!start || !end || start > end) {
+            alert("Please select a valid month range.");
+            return;
+        }
+        window.location.href = `/download-csv?start=${start}&end=${end}`;
+    });
+    const ctx = document.getElementById('telemetryChart').getContext('2d');
+    const telemetryChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: {{ chart_labels|tojson }},
+            datasets: [
+                {
+                    label: 'Voltage (V)',
+                    data: {{ voltage_chart|tojson }},
+                    borderColor: 'rgba(255, 99, 132, 1)',
+                    fill: false
+                },
+                {
+                    label: 'Current (A)',
+                    data: {{ current_chart|tojson }},
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    fill: false
+                },
+                {
+                    label: 'Steps',
+                    data: {{ steps_chart|tojson }},
+                    borderColor: 'rgba(75, 192, 192, 1)',
+                    fill: false
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            plugins: { title: { display: true, text: 'Daily Telemetry Averages' }},
+            scales: { y: { beginAtZero: true } }
+        }
+    });
+    let currentChartPage = 1;
+    const chart = telemetryChart;
+    async function fetchChartData(page = 1) {
+        const response = await fetch(`/api/chart-data?chart_page=${page}`);
+        const data = await response.json();
+        chart.data.labels = data.labels;
+        chart.data.datasets[0].data = data.voltage;
+        chart.data.datasets[1].data = data.current;
+        chart.data.datasets[2].data = data.steps;
+        chart.update();
+        currentChartPage = data.current_page;
+        renderChartPagination(data.total_pages);
+    }
+    function renderChartPagination(totalPages) {
+        const container = document.getElementById("chart-pagination-controls");
+        let html = `<ul class="pagination justify-content-center">`;
+        if (currentChartPage > 1) {
+            html += `<li class="page-item"><button class="page-link" onclick="fetchChartData(${currentChartPage - 1})">&laquo; Prev</button></li>`;
+        }
+        for (let i = 1; i <= totalPages; i++) {
+            html += `<li class="page-item ${i === currentChartPage ? 'active' : ''}"><button class="page-link" onclick="fetchChartData(${i})">${i}</button></li>`;
+        }
+        if (currentChartPage < totalPages) {
+            html += `<li class="page-item"><button class="page-link" onclick="fetchChartData(${currentChartPage + 1})">Next &raquo;</button></li>`;
+        }
+        html += `</ul>`;
+        container.innerHTML = html;
+    }
+    window.addEventListener("DOMContentLoaded", () => fetchChartData(1));
+</script>
 </body>
 </html>
