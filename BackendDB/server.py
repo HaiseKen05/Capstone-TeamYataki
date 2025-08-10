@@ -1,3 +1,13 @@
+"""
+Flask backend (refactored)
+
+- Keeps all existing web UI routes (HTML + CSV downloads) unchanged.
+- Adds a JSON API under /api/v1/* which uses the same session-based login.
+- Enables CORS only for /api/v1/* so external apps (e.g., Flutter) can call the API.
+- Refactors shared logic into helpers so UI and API use the same code paths.
+- Updated docstrings and comments for developer clarity.
+"""
+
 # ========================
 # === Standard Library ===
 # ========================
@@ -15,7 +25,7 @@ from math import ceil
 # ============================
 from flask import (
     Flask, request, render_template, redirect,
-    url_for, session, flash, send_file, jsonify, 
+    url_for, session, flash, send_file, jsonify,
 )
 from flask_bcrypt import Bcrypt
 from flask_cors import CORS
@@ -30,15 +40,14 @@ from sqlalchemy import func, extract
 from config import SQLALCHEMY_DATABASE_URI, SQLALCHEMY_TRACK_MODIFICATIONS
 from models import db, SensorData, User
 
-# ========================
+# ============================
 # === Global Forecast Cache ===
-# ========================
+# ============================
 forecast_cache = {
     "voltage": None,
     "current": None,
     "date": None
 }
-
 
 # ========================
 # === Flask App Setup  ===
@@ -46,24 +55,33 @@ forecast_cache = {
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = SQLALCHEMY_DATABASE_URI
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = SQLALCHEMY_TRACK_MODIFICATIONS
+# Keep your existing secret; in production move to env var.
 app.secret_key = "your_super_secret_key"
 
 db.init_app(app)
 bcrypt = Bcrypt(app)
 
+# Enable CORS only for API endpoints under /api/v1/*
+# This keeps the web UI same-origin while allowing cross-origin API usage.
+CORS(app, resources={r"/api/v1/*": {"origins": "*"}})
+
+
 @app.before_request
 def initialize_database():
     """
-    Ensures tables are created before the first request is handled.
+    Ensure database tables exist before handling any request.
+    This is helpful during development so you don't need separate migrations for quick tests.
     """
     db.create_all()
 
+
 # ======================
-# === Auth Decorator ===
+# === Auth Decorators ===
 # ======================
 def login_required(f):
     """
-    Restrict access to routes to logged-in users only.
+    Existing decorator used by web UI routes.
+    Redirects to login page when user is not authenticated (HTML flow).
     """
     @wraps(f)
     def decorated(*args, **kwargs):
@@ -73,13 +91,31 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated
 
+
+def api_login_required(f):
+    """
+    JSON-friendly decorator for API endpoints. Returns 401 JSON response when unauthenticated.
+    Uses the same session cookie (Flask session) as web UI.
+    """
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if "user_id" not in session:
+            return jsonify({"error": "Login required"}), 401
+        return f(*args, **kwargs)
+    return decorated
+
+
 # ==========================
 # === Forecast Utilities ===
 # ==========================
 def prepare_daily_avg_data(field: str):
     """
-    Extract daily average values for the given field.
-    Returns X, y for regression and the raw DataFrame.
+    Extract daily average values for the specified field from SensorData.
+
+    Returns:
+        X (np.ndarray): day index array (n,1) for regression
+        y (np.ndarray): observed averages
+        df (pandas.DataFrame): full daily DataFrame with columns date, avg_value, day_num
     """
     column = getattr(SensorData, field)
     daily_data = (
@@ -103,12 +139,17 @@ def prepare_daily_avg_data(field: str):
     y = df["avg_value"].values
     return X, y, df
 
+
 def predict_highest_month(field: str):
     """
-    Predicts the month with the highest future average for a given field.
-    Returns (Month Name, Value)
+    Use a linear regression model on monthly averages to predict which future month
+    (within the next 12 months) will have the highest average for the provided field.
+
+    Returns:
+        (month_name_year, value) or (None, None) if insufficient data
     """
     column = getattr(SensorData, field)
+    # Note: func.date_format is MySQL-specific; if you use a different DB, change accordingly.
     monthly_data = (
         db.session.query(
             func.date_format(SensorData.datetime, "%Y-%m-01").label("month"),
@@ -124,6 +165,7 @@ def predict_highest_month(field: str):
 
     df = pd.DataFrame(monthly_data, columns=["month", "avg_value"])
     df["month"] = pd.to_datetime(df["month"])
+    # Convert to a continuous month number for regression
     df["month_num"] = (df["month"].dt.year - df["month"].dt.year.min()) * 12 + df["month"].dt.month
 
     X = df["month_num"].values.reshape(-1, 1)
@@ -142,39 +184,106 @@ def predict_highest_month(field: str):
     ]
 
     best_idx = np.argmax(predictions)
-    return predicted_dates[best_idx].strftime("%B %Y"), round(predictions[best_idx], 2)
+    return predicted_dates[best_idx].strftime("%B %Y"), round(float(predictions[best_idx]), 2)
+
 
 def update_forecast_cache():
     """
-    Updates in-memory forecast using linear regression models.
+    Compute next-day forecasts for voltage & current using daily averages and store
+    results in the in-memory forecast_cache. Exceptions are printed (no crash).
     """
     try:
         Xv, yv, dfv = prepare_daily_avg_data("raw_voltage")
         if Xv is not None:
-            forecast_cache["voltage"] = round(LinearRegression().fit(Xv, yv).predict([[dfv["day_num"].max() + 1]])[0], 2)
+            v_model = LinearRegression().fit(Xv, yv)
+            next_day_num = [[int(dfv["day_num"].max() + 1)]]
+            forecast_cache["voltage"] = round(float(v_model.predict(next_day_num)[0]), 2)
 
         Xc, yc, dfc = prepare_daily_avg_data("raw_current")
         if Xc is not None:
-            forecast_cache["current"] = round(LinearRegression().fit(Xc, yc).predict([[dfc["day_num"].max() + 1]])[0], 2)
+            c_model = LinearRegression().fit(Xc, yc)
+            next_day_num = [[int(dfc["day_num"].max() + 1)]]
+            forecast_cache["current"] = round(float(c_model.predict(next_day_num)[0]), 2)
 
         forecast_cache["date"] = datetime.now().date()
-        print(f"[Forecast Cache Updated] {forecast_cache['date']}")
+        app.logger.debug(f"[Forecast Cache Updated] {forecast_cache['date']}")
     except Exception as e:
-        print(f"[Forecast Cache Error] {e}")
+        app.logger.error(f"[Forecast Cache Error] {e}")
+
 
 def retrain_forecast_models():
     """
-    Background thread that updates forecast daily.
+    Background thread function that updates forecast_cache daily.
+    Runs forever as a daemon thread when the app starts.
     """
     while True:
         update_forecast_cache()
-        time.sleep(86400)  # 24 hours
-CORS(app)
+        time.sleep(86400)  # Sleep for 24 hours
+
+
+# =========================
+# === Shared Query Helpers ===
+# =========================
+def get_sensor_query(start_time=None, end_time=None):
+    """
+    Return a base SQLAlchemy query for SensorData with optional time filtering.
+    Shared between UI and API to keep behavior consistent.
+    """
+    q = SensorData.query.order_by(SensorData.datetime.desc())
+    if start_time and end_time:
+        q = q.filter(SensorData.datetime >= start_time, SensorData.datetime < end_time)
+    elif start_time:
+        q = q.filter(SensorData.datetime >= start_time)
+    return q
+
+
+def get_summary_query(start_time=None, end_time=None):
+    """
+    Return a SQLAlchemy query that aggregates daily summaries (sum of steps, voltage, current).
+    """
+    q = (
+        db.session.query(
+            func.date(SensorData.datetime).label('date'),
+            func.sum(SensorData.steps).label('total_steps'),
+            func.sum(SensorData.raw_voltage).label('total_voltage'),
+            func.sum(SensorData.raw_current).label('total_current')
+        )
+        .group_by(func.date(SensorData.datetime))
+        .order_by(func.date(SensorData.datetime).desc())
+    )
+    if start_time and end_time:
+        q = q.filter(SensorData.datetime >= start_time, SensorData.datetime < end_time)
+    elif start_time:
+        q = q.filter(SensorData.datetime >= start_time)
+    return q
+
+
+def get_chart_query():
+    """
+    Return a SQLAlchemy query that produces daily aggregates used for charts.
+    """
+    q = (
+        db.session.query(
+            func.date(SensorData.datetime).label('date'),
+            func.avg(SensorData.raw_voltage).label('avg_voltage'),
+            func.avg(SensorData.raw_current).label('avg_current'),
+            func.sum(SensorData.steps).label('total_steps')
+        )
+        .group_by(func.date(SensorData.datetime))
+        .order_by(func.date(SensorData.datetime).desc())
+    )
+    return q
+
+
+
 # =========================
 # === Authentication UI ===
 # =========================
 @app.route("/login", methods=["GET", "POST"])
 def login():
+    """
+    Web UI login (HTML). On successful login sets Flask session and redirects to the dashboard.
+    """
     if request.method == "POST":
         user = User.query.filter_by(username=request.form["username"]).first()
         if user and user.check_password(request.form["password"]):
@@ -183,16 +292,25 @@ def login():
         flash("Invalid credentials", "danger")
     return render_template("login.html")
 
+
 @app.route("/logout")
 def logout():
+    """
+    Web UI logout (HTML). Clears session and redirects to login.
+    """
     session.pop("user_id", None)
     flash("Logged out", "success")
     return redirect(url_for("login"))
 
+
 @app.route("/register", methods=["GET", "POST"])
 def register():
+    """
+    Web UI registration. This route contains a playful 'sudo_command' gate used previously.
+    It will continue to require the same check to create Admin users.
+    """
     if request.method == "POST":
-        if request.form["sudo_command"].strip() != '$sudo-apt: enable | acc | reg | "TRUE" / admin':  # Temporary only and some fun adding Administrator Accounts
+        if request.form["sudo_command"].strip() != '$sudo-apt: enable | acc | reg | "TRUE" / admin':
             return "<h3>Unauthorized: Admin command verification failed</h3>", 403
 
         hashed_pw = bcrypt.generate_password_hash(request.form["password"]).decode("utf-8")
@@ -202,18 +320,20 @@ def register():
         return redirect(url_for("login"))
     return render_template("register.html")
 
+
 @app.route("/")
 @login_required
 def index():
     return redirect(url_for("sensor_dashboard"))
 
+
 # =========================
-# === Data Ingestion API ===
+# === Data Ingestion API & UI ===
 # =========================
 @app.route("/add-log", methods=["POST"])
 def add_log():
     """
-    Inserts new sensor data and invalidates forecast cache.
+    Web UI form endpoint to add a new sensor log. Invalidate forecast cache on success.
     """
     try:
         form = request.form
@@ -230,18 +350,51 @@ def add_log():
     except Exception as e:
         return f"<h3>Failed to log data: {e}</h3>", 500
 
+
+@app.route("/api/v1/add-log", methods=["POST"])
+@api_login_required
+def api_add_log():
+    """
+    API endpoint to add a new sensor log.
+    Accepts JSON body with keys: steps, datetime (ISO or YYYY-MM-DDTHH:MM), raw_voltage, raw_current.
+    Returns JSON response with created log id or error message.
+    """
+    try:
+        data = request.get_json() or request.form
+        steps = int(data.get("steps"))
+        # Accept either ISO with "T" or a space
+        dt_str = data.get("datetime")
+        dt = datetime.fromisoformat(dt_str) if "T" in dt_str or "-" in dt_str else datetime.strptime(dt_str, "%Y-%m-%d %H:%M")
+        raw_voltage = float(data.get("raw_voltage"))
+        raw_current = float(data.get("raw_current"))
+
+        new_log = SensorData(steps=steps, datetime=dt, raw_voltage=raw_voltage, raw_current=raw_current)
+        db.session.add(new_log)
+        db.session.commit()
+        # Invalidate the forecast so next read recomputes
+        forecast_cache["date"] = None
+
+        return jsonify({"status": "success", "id": new_log.id}), 201
+    except Exception as e:
+        return jsonify({"error": "Failed to add log", "details": str(e)}), 400
+
+
+# =========================
+# === Logs & Export (Web) ===
+# =========================
 @app.route("/api/latest-logs")
 @login_required
 def latest_logs():
     """
-    Returns latest 10 logs as JSON for dynamic frontend updates.
+    Web-protected API endpoint (keeps original name) that returns last 10 logs as JSON.
+    This is retained for compatibility with front-end code that expects /api/latest-logs.
     """
     logs = (
         SensorData.query.order_by(SensorData.datetime.desc())
         .limit(10)
         .all()
     )
-    return {
+    return jsonify({
         "logs": [
             {
                 "id": log.id,
@@ -251,15 +404,15 @@ def latest_logs():
                 "datetime": log.datetime.strftime("%Y-%m-%d %H:%M:%S")
             } for log in logs
         ]
-    }
-    
+    })
 
 
 
 @app.route("/download-csv")
 def download_csv():
     """
-    Downloads logs as CSV based on a month range filter.
+    Web UI CSV export. This remains web-only per your requirement.
+    Accepts `start` and `end` query params in YYYY-MM format.
     """
     start = request.args.get('start')
     end = request.args.get('end')
@@ -276,13 +429,13 @@ def download_csv():
     if start_date > end_date:
         return "Start month must be before end month", 400
 
-    # Query logs
+    # Query logs for the inclusive start-end month range
     logs = SensorData.query.filter(
         SensorData.datetime >= start_date,
         SensorData.datetime < (end_date.replace(day=28) + timedelta(days=4)).replace(day=1)
     ).all()
 
-    # Write CSV
+    # Build CSV
     string_buffer = StringIO()
     writer = csv.writer(string_buffer)
     writer.writerow(['ID', 'Steps', 'Raw Voltage', 'Raw Current', 'Datetime'])
@@ -300,7 +453,7 @@ def download_csv():
     byte_buffer.write(string_buffer.getvalue().encode('utf-8'))
     byte_buffer.seek(0)
 
-    # Filename construction
+    # Filename
     start_month_name = calendar.month_name[start_date.month]
     end_month_name = calendar.month_name[end_date.month]
     year = start_date.year
@@ -317,9 +470,17 @@ def download_csv():
         download_name=filename
     )
 
+
+# =========================
+# === Dashboard (Web UI) ===
+# =========================
 @app.route("/sensor-dashboard")
 @login_required
 def sensor_dashboard():
+    """
+    Original web UI dashboard route.
+    Uses the shared helper functions to build all metrics and chart data.
+    """
     now = datetime.now()
     per_page = 10
     chart_days_per_page = 7
@@ -353,13 +514,9 @@ def sensor_dashboard():
         start_time = end_time = None
 
     # --- Query SensorData ---
-    sensor_query = SensorData.query.order_by(SensorData.datetime.desc())
-    if start_time and end_time:
-        sensor_query = sensor_query.filter(SensorData.datetime >= start_time, SensorData.datetime < end_time)
-    elif start_time:
-        sensor_query = sensor_query.filter(SensorData.datetime >= start_time)
+    sensor_query = get_sensor_query(start_time, end_time)
 
-    # --- Export Sensor Data ---
+    # --- Export Sensor Data (Web-only) ---
     if export_type == "sensor":
         output = StringIO()
         writer = csv.writer(output)
@@ -370,22 +527,9 @@ def sensor_dashboard():
         return send_file(output, mimetype='text/csv', as_attachment=True, download_name='sensor_logs.csv')
 
     # --- Summary Aggregation (Daily) ---
-    summary_query = (
-        db.session.query(
-            func.date(SensorData.datetime).label('date'),
-            func.sum(SensorData.steps).label('total_steps'),
-            func.sum(SensorData.raw_voltage).label('total_voltage'),
-            func.sum(SensorData.raw_current).label('total_current')
-        )
-        .group_by(func.date(SensorData.datetime))
-        .order_by(func.date(SensorData.datetime).desc())
-    )
-    if start_time and end_time:
-        summary_query = summary_query.filter(SensorData.datetime >= start_time, SensorData.datetime < end_time)
-    elif start_time:
-        summary_query = summary_query.filter(SensorData.datetime >= start_time)
+    summary_query = get_summary_query(start_time, end_time)
 
-    # --- Export Summary Data ---
+    # --- Export Summary Data (Web-only) ---
     if export_type == "summary":
         output = StringIO()
         writer = csv.writer(output)
@@ -398,7 +542,7 @@ def sensor_dashboard():
     # --- Paginate Sensor Logs ---
     total_sensor_logs = sensor_query.count()
     sensor_data = sensor_query.offset((sensor_page - 1) * per_page).limit(per_page).all()
-    total_sensor_pages = ceil(total_sensor_logs / per_page)
+    total_sensor_pages = ceil(total_sensor_logs / per_page) if total_sensor_logs else 1
 
     # --- Metrics ---
     summary_data_all = summary_query.all()
@@ -423,21 +567,13 @@ def sensor_dashboard():
     # --- Forecast Update ---
     if forecast_cache["date"] != datetime.now().date():
         update_forecast_cache()
-    forecast_date = (datetime.now() + timedelta(days=1)).strftime("%B %#d, %Y")
+    # Keep original forecast_date presentation but compute using tomorrow
+    forecast_date = (datetime.now() + timedelta(days=1)).strftime("%B %#d, %Y") if "%" in "%d" else (datetime.now() + timedelta(days=1)).strftime("%B %d, %Y")
 
     # --- Chart Pagination ---
-    chart_query = (
-        db.session.query(
-            func.date(SensorData.datetime).label('date'),
-            func.avg(SensorData.raw_voltage).label('avg_voltage'),
-            func.avg(SensorData.raw_current).label('avg_current'),
-            func.sum(SensorData.steps).label('total_steps')
-        )
-        .group_by(func.date(SensorData.datetime))
-        .order_by(func.date(SensorData.datetime).desc())
-    )
+    chart_query = get_chart_query()
     daily_aggregates = chart_query.all()
-    total_chart_pages = ceil(len(daily_aggregates) / chart_days_per_page)
+    total_chart_pages = ceil(len(daily_aggregates) / chart_days_per_page) if daily_aggregates else 1
     paginated_chart_data = daily_aggregates[
         (chart_page - 1) * chart_days_per_page : chart_page * chart_days_per_page
     ][::-1]
@@ -500,25 +636,140 @@ def sensor_dashboard():
         show_summary_pagination=show_summary_pagination
     )
 
-@app.route("/api/chart-data")
-@login_required
-def chart_data_api():
-    chart_days_per_page = 7
+
+# =========================
+# === API: Logs, Summary, Chart, Forecast ===
+# =========================
+@app.route("/api/v1/sensor-data")
+@api_login_required
+def api_sensor_data():
+    """
+    Return paginated raw sensor logs as JSON.
+    Query params:
+      - page (int)
+      - per_page (int)
+      - filter (day|week|month) or month=YYYY-MM for month selection
+    """
+    now = datetime.now()
+    per_page = request.args.get("per_page", 10, type=int)
+    page = request.args.get("page", 1, type=int)
+
+    # Time filtering logic mirrors the web UI
+    filter_type = request.args.get("filter")
+    month_filter = request.args.get("month")
+
+    if month_filter:
+        try:
+            year, month = map(int, month_filter.split("-"))
+            start_time = datetime(year, month, 1)
+            end_time = datetime(year + 1, 1, 1) if month == 12 else datetime(year, month + 1, 1)
+        except ValueError:
+            start_time = end_time = None
+    elif filter_type == "day":
+        start_time = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_time = None
+    elif filter_type == "week":
+        start_time = now - timedelta(days=now.weekday())
+        end_time = None
+    elif filter_type == "month":
+        start_time = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        end_time = None
+    else:
+        start_time = end_time = None
+
+    sensor_query = get_sensor_query(start_time, end_time)
+    total_logs = sensor_query.count()
+    logs = sensor_query.offset((page - 1) * per_page).limit(per_page).all()
+
+    return jsonify({
+        "page": page,
+        "per_page": per_page,
+        "total_pages": ceil(total_logs / per_page) if total_logs else 1,
+        "total_logs": total_logs,
+        "logs": [
+            {
+                "id": r.id,
+                "datetime": r.datetime.strftime("%Y-%m-%d %H:%M:%S"),
+                "steps": r.steps,
+                "voltage": r.raw_voltage,
+                "current": r.raw_current
+            } for r in logs
+        ]
+    })
+
+
+@app.route("/api/v1/summary-data")
+@api_login_required
+def api_summary_data():
+    """
+    Return daily summary aggregates as JSON with pagination.
+    Query params:
+      - page (int)
+      - per_page (int)
+      - filter / month same as sensor-data
+    """
+    per_page = request.args.get("per_page", 10, type=int)
+    page = request.args.get("page", 1, type=int)
+    now = datetime.now()
+
+    filter_type = request.args.get("filter")
+    month_filter = request.args.get("month")
+
+    if month_filter:
+        try:
+            year, month = map(int, month_filter.split("-"))
+            start_time = datetime(year, month, 1)
+            end_time = datetime(year + 1, 1, 1) if month == 12 else datetime(year, month + 1, 1)
+        except ValueError:
+            start_time = end_time = None
+    elif filter_type == "day":
+        start_time = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_time = None
+    elif filter_type == "week":
+        start_time = now - timedelta(days=now.weekday())
+        end_time = None
+    elif filter_type == "month":
+        start_time = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        end_time = None
+    else:
+        start_time = end_time = None
+
+    summary_query = get_summary_query(start_time, end_time)
+    paginated = summary_query.paginate(page=page, per_page=per_page, error_out=False)
+
+    items = [
+        {
+            "date": row.date.strftime("%Y-%m-%d"),
+            "total_steps": int(row.total_steps or 0),
+            "total_voltage": float(row.total_voltage or 0.0),
+            "total_current": float(row.total_current or 0.0)
+        } for row in paginated.items
+    ]
+
+    return jsonify({
+        "page": page,
+        "per_page": per_page,
+        "total_pages": paginated.pages,
+        "total_items": paginated.total,
+        "items": items
+    })
+
+
+@app.route("/api/v1/chart-data")
+@api_login_required
+def api_chart_data():
+    """
+    Return paginated chart-ready daily aggregates as JSON.
+    Query params:
+      - chart_page (int)
+      - days_per_page (int)
+    """
+    chart_days_per_page = request.args.get("days_per_page", 7, type=int)
     chart_page = request.args.get("chart_page", 1, type=int)
 
-    chart_query = (
-        db.session.query(
-            func.date(SensorData.datetime).label('date'),
-            func.avg(SensorData.raw_voltage).label('avg_voltage'),
-            func.avg(SensorData.raw_current).label('avg_current'),
-            func.sum(SensorData.steps).label('total_steps')
-        )
-        .group_by(func.date(SensorData.datetime))
-        .order_by(func.date(SensorData.datetime).desc())
-    )
-
+    chart_query = get_chart_query()
     daily_aggregates = chart_query.all()
-    total_chart_pages = ceil(len(daily_aggregates) / chart_days_per_page)
+    total_chart_pages = ceil(len(daily_aggregates) / chart_days_per_page) if daily_aggregates else 1
     paginated_chart_data = daily_aggregates[
         (chart_page - 1) * chart_days_per_page : chart_page * chart_days_per_page
     ][::-1]
@@ -527,14 +778,99 @@ def chart_data_api():
         "labels": [d[0].strftime("%b %d") for d in paginated_chart_data],
         "voltage": [round(d[1], 2) for d in paginated_chart_data],
         "current": [round(d[2], 2) for d in paginated_chart_data],
-        "steps": [d[3] for d in paginated_chart_data],
+        "steps": [int(d[3] or 0) for d in paginated_chart_data],
         "total_pages": total_chart_pages,
         "current_page": chart_page
     })
 
+
+@app.route("/api/v1/forecast")
+@api_login_required
+def api_forecast():
+    """
+    Returns the current forecast cache and best-month predictions for voltage & current.
+    If cache is stale for today, recompute first.
+    """
+    if forecast_cache["date"] != datetime.now().date():
+        update_forecast_cache()
+
+    best_voltage_month, best_voltage_value = predict_highest_month("raw_voltage")
+    best_current_month, best_current_value = predict_highest_month("raw_current")
+
+    return jsonify({
+        "forecast_date": (datetime.now() + timedelta(days=1)).strftime("%B %d, %Y"),
+        "forecast_voltage": forecast_cache["voltage"],
+        "forecast_current": forecast_cache["current"],
+        "best_voltage_month": best_voltage_month,
+        "best_voltage_value": best_voltage_value,
+        "best_current_month": best_current_month,
+        "best_current_value": best_current_value
+    })
+
+
+# =========================
+# === API Authentication ===
+# =========================
+@app.route("/api/v1/login", methods=["POST"])
+def api_login():
+    """
+    API login that uses the same session cookie mechanism as the web UI.
+    Accepts JSON body: {"username": "...", "password": "..."}
+    Returns 200 on success and sets session cookie in response.
+    """
+    data = request.get_json() or request.form
+    username = data.get("username")
+    password = data.get("password")
+    if not username or not password:
+        return jsonify({"error": "Missing username or password"}), 400
+
+    user = User.query.filter_by(username=username).first()
+    if user and user.check_password(password):
+        session["user_id"] = user.id
+        return jsonify({"status": "success", "user_id": user.id})
+    return jsonify({"error": "Invalid credentials"}), 401
+
+
+@app.route("/api/v1/logout", methods=["POST"])
+@api_login_required
+def api_logout():
+    """
+    API logout clears the session cookie (same action as web UI).
+    """
+    session.pop("user_id", None)
+    return jsonify({"status": "logged_out"})
+
+
+@app.route("/api/v1/register", methods=["POST"])
+def api_register():
+    """
+    API registration endpoint. Maintains the same playful sudo_command gate as the UI.
+    Accepts JSON body: username, password, sudo_command
+    """
+    data = request.get_json() or request.form
+    sudo = data.get("sudo_command", "")
+    if sudo.strip() != '$sudo-apt: enable | acc | reg | "TRUE" / admin':
+        return jsonify({"error": "Unauthorized: Admin command verification failed"}), 403
+
+    username = data.get("username")
+    password = data.get("password")
+    if not username or not password:
+        return jsonify({"error": "Missing username or password"}), 400
+
+    hashed_pw = bcrypt.generate_password_hash(password).decode("utf-8")
+    user = User(name=None, username=username, password=hashed_pw, role="Admin")
+    db.session.add(user)
+    db.session.commit()
+    return jsonify({"status": "created", "user_id": user.id}), 201
+
+
+# ========================
+# === Misc / Health API ===
+# ========================
 @app.route("/ping", methods=["GET"])
 def ping():
     return "Pong from server!", 200
+
 
 # ========================
 # === Run Flask App    ===
