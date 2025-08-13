@@ -6,6 +6,10 @@ Flask backend (refactored)
 - Enables CORS only for /api/v1/* so external apps (e.g., Flutter) can call the API.
 - Refactors shared logic into helpers so UI and API use the same code paths.
 - Updated docstrings and comments for developer clarity.
+
+- NEW: Same-origin aliases for front-end AJAX:
+    * /api/chart-data (mirrors /api/v1/chart-data output)
+    * /api/daily-summary (mirrors /api/v1/summary-data but keys: entries, current_page)
 """
 
 # ========================
@@ -62,7 +66,6 @@ db.init_app(app)
 bcrypt = Bcrypt(app)
 
 # Enable CORS only for API endpoints under /api/v1/*
-# This keeps the web UI same-origin while allowing cross-origin API usage.
 CORS(app, resources={r"/api/v1/*": {"origins": "*"}})
 
 
@@ -183,7 +186,7 @@ def predict_highest_month(field: str):
         for m in future_months
     ]
 
-    best_idx = np.argmax(predictions)
+    best_idx = int(np.argmax(predictions))
     return predicted_dates[best_idx].strftime("%B %Y"), round(float(predictions[best_idx]), 2)
 
 
@@ -567,8 +570,11 @@ def sensor_dashboard():
     # --- Forecast Update ---
     if forecast_cache["date"] != datetime.now().date():
         update_forecast_cache()
-    # Keep original forecast_date presentation but compute using tomorrow
-    forecast_date = (datetime.now() + timedelta(days=1)).strftime("%B %#d, %Y") if "%" in "%d" else (datetime.now() + timedelta(days=1)).strftime("%B %d, %Y")
+    # Cross-platform day formatting
+    try:
+        forecast_date = (datetime.now() + timedelta(days=1)).strftime("%B %-d, %Y")
+    except ValueError:
+        forecast_date = (datetime.now() + timedelta(days=1)).strftime("%B %d, %Y")
 
     # --- Chart Pagination ---
     chart_query = get_chart_query()
@@ -805,6 +811,102 @@ def api_forecast():
         "best_voltage_value": best_voltage_value,
         "best_current_month": best_current_month,
         "best_current_value": best_current_value
+    })
+
+
+# =========================================================
+# === NEW: Same-origin convenience routes for front-end ===
+# =========================================================
+
+def _map_summary_to_frontend_shape(paginated):
+    """
+    Convert Flask-SQLAlchemy paginate result into the shape expected by the front-end JS:
+      { entries: [...], current_page: int, total_pages: int }
+    """
+    return {
+        "entries": [
+            {
+                "date": row.date.strftime("%Y-%m-%d"),
+                "total_steps": int(row.total_steps or 0),
+                "total_voltage": f"{float(row.total_voltage or 0.0):.2f}",
+                "total_current": f"{float(row.total_current or 0.0):.2f}",
+            } for row in paginated.items
+        ],
+        "current_page": paginated.page,
+        "total_pages": paginated.pages or 1
+    }
+
+
+@app.route("/api/daily-summary")
+@login_required
+def daily_summary_alias():
+    """
+    Same-origin alias for AJAX in the dashboard.
+    Mirrors /api/v1/summary-data but returns keys the front-end expects:
+      - entries (list of rows)
+      - current_page
+      - total_pages
+
+    Query params:
+      - page (int)
+      - per_page (int, default 10)
+      - (optional) filter, month — same semantics as UI
+    """
+    per_page = request.args.get("per_page", 10, type=int)
+    page = request.args.get("page", 1, type=int)
+    now = datetime.now()
+
+    filter_type = request.args.get("filter")
+    month_filter = request.args.get("month")
+
+    if month_filter:
+        try:
+            year, month = map(int, month_filter.split("-"))
+            start_time = datetime(year, month, 1)
+            end_time = datetime(year + 1, 1, 1) if month == 12 else datetime(year, month + 1, 1)
+        except ValueError:
+            start_time = end_time = None
+    elif filter_type == "day":
+        start_time = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_time = None
+    elif filter_type == "week":
+        start_time = now - timedelta(days=now.weekday())
+        end_time = None
+    elif filter_type == "month":
+        start_time = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        end_time = None
+    else:
+        start_time = end_time = None
+
+    summary_query = get_summary_query(start_time, end_time)
+    paginated = summary_query.paginate(page=page, per_page=per_page, error_out=False)
+    return jsonify(_map_summary_to_frontend_shape(paginated))
+
+
+@app.route("/api/chart-data")
+@login_required
+def chart_data_alias():
+    """
+    Same-origin alias for AJAX in the dashboard.
+    Mirrors /api/v1/chart-data output exactly so the front-end can call /api/chart-data.
+    """
+    chart_days_per_page = request.args.get("days_per_page", 7, type=int)
+    chart_page = request.args.get("chart_page", 1, type=int)
+
+    chart_query = get_chart_query()
+    daily_aggregates = chart_query.all()
+    total_chart_pages = ceil(len(daily_aggregates) / chart_days_per_page) if daily_aggregates else 1
+    paginated_chart_data = daily_aggregates[
+        (chart_page - 1) * chart_days_per_page : chart_page * chart_days_per_page
+    ][::-1]
+
+    return jsonify({
+        "labels": [d[0].strftime("%b %d") for d in paginated_chart_data],
+        "voltage": [round(d[1], 2) for d in paginated_chart_data],
+        "current": [round(d[2], 2) for d in paginated_chart_data],
+        "steps": [int(d[3] or 0) for d in paginated_chart_data],
+        "total_pages": total_chart_pages,
+        "current_page": chart_page
     })
 
 

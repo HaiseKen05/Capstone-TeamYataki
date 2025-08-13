@@ -44,10 +44,19 @@
         }
         .card {
             border-radius: 1rem;
-            box-shadow: 0 0.2rem 0.75rem rgb(0, 0, 0);
+            box-shadow: 0 0.2rem 0.75rem rgba(218, 204, 204, 1);
         }
         .table th, .table td {
             vertical-align: middle;
+        }
+        .dark-mode .forecast-card {
+            background-color: #1e1e1e;
+            color: #fff;
+        }
+        /* Dark mode table header styling */
+        .dark-mode .table thead {
+            background-color: #2c2c2c;
+            color: #fff;
         }
     </style>
 </head>
@@ -151,7 +160,7 @@
         </div>
         <div class="table-responsive">
             <table class="table table-bordered mb-0">
-                <thead class="table-dark">
+                <thead>
                     <tr>
                         <th>Metric</th>
                         <th>Steps</th>
@@ -169,7 +178,7 @@
         </div>
     </div>
     <!-- Forecast Section -->
-    <div class="card bg-dark text-light mb-4">
+    <div class="card forecast-card mb-4">
         <div class="card-body">
             <h5><i class="bi bi-lightning-fill text-warning me-2"></i>Highest Energy Generated (Monthly)</h5>
             <div class="row mb-2">
