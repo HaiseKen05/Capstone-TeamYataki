@@ -53,6 +53,9 @@ forecast_cache = {
     "date": None
 }
 
+# Minimum months of history required for monthly best-month prediction
+MIN_MONTHS_REQUIRED = 6
+
 # ========================
 # === Flask App Setup  ===
 # ========================
@@ -143,16 +146,14 @@ def prepare_daily_avg_data(field: str):
     return X, y, df
 
 
-def predict_highest_month(field: str):
+def load_monthly_data(field: str, min_months_required: int = MIN_MONTHS_REQUIRED):
     """
-    Use a linear regression model on monthly averages to predict which future month
-    (within the next 12 months) will have the highest average for the provided field.
-
-    Returns:
-        (month_name_year, value) or (None, None) if insufficient data
+    Aggregate monthly averages for the given field (raw_voltage/raw_current).
+    Returns DataFrame with month, avg_value, month_num if enough data exists.
+    Otherwise returns None.
     """
     column = getattr(SensorData, field)
-    # Note: func.date_format is MySQL-specific; if you use a different DB, change accordingly.
+    # Note: func.date_format is MySQL-specific; adjust if using a different DB.
     monthly_data = (
         db.session.query(
             func.date_format(SensorData.datetime, "%Y-%m-01").label("month"),
@@ -163,19 +164,31 @@ def predict_highest_month(field: str):
         .all()
     )
 
-    if len(monthly_data) < 2:
-        return None, None
+    if len(monthly_data) < min_months_required:
+        return None
 
     df = pd.DataFrame(monthly_data, columns=["month", "avg_value"])
     df["month"] = pd.to_datetime(df["month"])
-    # Convert to a continuous month number for regression
+    # Convert to continuous month number for regression
     df["month_num"] = (df["month"].dt.year - df["month"].dt.year.min()) * 12 + df["month"].dt.month
+    return df
+
+
+def predict_highest_month(field: str, min_months_required: int = MIN_MONTHS_REQUIRED):
+    """
+    Predict the month (within the next 12 months) with the highest average value.
+    Requires at least `min_months_required` months of history.
+    Returns:
+        (month_name_year, value) or (None, None) if insufficient data
+    """
+    df = load_monthly_data(field, min_months_required=min_months_required)
+    if df is None:
+        return None, None
 
     X = df["month_num"].values.reshape(-1, 1)
     y = df["avg_value"].values
 
-    model = LinearRegression()
-    model.fit(X, y)
+    model = LinearRegression().fit(X, y)
 
     future_months = [df["month_num"].max() + i for i in range(1, 13)]
     predictions = model.predict(np.array(future_months).reshape(-1, 1))
@@ -592,6 +605,10 @@ def sensor_dashboard():
     # --- Best Month Predictions ---
     best_voltage_month, best_voltage_value = predict_highest_month("raw_voltage")
     best_current_month, best_current_value = predict_highest_month("raw_current")
+    if best_voltage_month is None or best_current_month is None:
+        monthly_forecast_message = "Not enough historical data for monthly forecast. Please collect more data."
+    else:
+        monthly_forecast_message = None
 
     # --- Paginate Summary Table ---
     paginated_summary = summary_query.paginate(page=summary_page, per_page=per_page, error_out=False)
@@ -628,6 +645,7 @@ def sensor_dashboard():
         best_voltage_value=best_voltage_value,
         best_current_month=best_current_month,
         best_current_value=best_current_value,
+        monthly_forecast_message=monthly_forecast_message,
 
         chart_labels=chart_labels,
         voltage_chart=voltage_chart,
@@ -794,24 +812,34 @@ def api_chart_data():
 @api_login_required
 def api_forecast():
     """
-    Returns the current forecast cache and best-month predictions for voltage & current.
-    If cache is stale for today, recompute first.
+    Returns the current forecast cache and best-month predictions 
+    for voltage & current. If cache is stale for today, recompute first.
+    Includes a message when there isn't enough historical data for monthly forecast.
     """
+
+    # Recompute if cache is stale
     if forecast_cache["date"] != datetime.now().date():
         update_forecast_cache()
 
+    # Compute best months for voltage & current
     best_voltage_month, best_voltage_value = predict_highest_month("raw_voltage")
     best_current_month, best_current_value = predict_highest_month("raw_current")
 
-    return jsonify({
+    response = {
         "forecast_date": (datetime.now() + timedelta(days=1)).strftime("%B %d, %Y"),
-        "forecast_voltage": forecast_cache["voltage"],
-        "forecast_current": forecast_cache["current"],
+        "forecast_voltage": forecast_cache.get("voltage"),
+        "forecast_current": forecast_cache.get("current"),
         "best_voltage_month": best_voltage_month,
         "best_voltage_value": best_voltage_value,
         "best_current_month": best_current_month,
         "best_current_value": best_current_value
-    })
+    }
+
+    if best_voltage_month is None or best_current_month is None:
+        response["message"] = "Not enough historical data for monthly forecast. Please collect more data."
+
+    return jsonify(response)
+
 
 
 # =========================================================
@@ -972,6 +1000,13 @@ def api_register():
 @app.route("/ping", methods=["GET"])
 def ping():
     return "Pong from server!", 200
+
+@app.route('/handshake', methods=['POST'])
+def handshake():
+    try:
+        return jsonify({"message": "Handshake successful. Connection established!"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 # ========================
