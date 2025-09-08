@@ -78,8 +78,8 @@ Educational tool for data science + web development integration
 Any system requiring simple telemetry tracking and forecasting
 
 ---
-## ⚠️ Key Important Documentation 
+# ⚠️ Key Important Documentation 
 
-# 🔑 Registration 
+## 🔑 Registration 
 - To register as an admin press "CTRL" + "SHIFT" + "Q" to access a button to register as an admin.
 - Enter your desired "Username" and "Password" and enter a command line <details> $sudo-apt: enable | acc | reg | "TRUE" / admin </details> 
