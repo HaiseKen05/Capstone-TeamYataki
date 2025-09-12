@@ -812,19 +812,16 @@ def api_chart_data():
 @api_login_required
 def api_forecast():
     """
-    Returns the current forecast cache and best-month predictions 
-    for voltage & current. If cache is stale for today, recompute first.
+    Returns the current forecast cache and best-month predictions for voltage & current.
+    If cache is stale for today, recompute first.
     Includes a message when there isn't enough historical data for monthly forecast.
     """
-
     # Recompute if cache is stale
     if forecast_cache["date"] != datetime.now().date():
         update_forecast_cache()
-
     # Compute best months for voltage & current
     best_voltage_month, best_voltage_value = predict_highest_month("raw_voltage")
     best_current_month, best_current_value = predict_highest_month("raw_current")
-
     response = {
         "forecast_date": (datetime.now() + timedelta(days=1)).strftime("%B %d, %Y"),
         "forecast_voltage": forecast_cache.get("voltage"),
@@ -834,10 +831,8 @@ def api_forecast():
         "best_current_month": best_current_month,
         "best_current_value": best_current_value
     }
-
     if best_voltage_month is None or best_current_month is None:
         response["message"] = "Not enough historical data for monthly forecast. Please collect more data."
-
     return jsonify(response)
 
 
