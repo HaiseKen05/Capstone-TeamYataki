@@ -365,117 +365,33 @@ def add_log():
         return redirect(url_for("sensor_dashboard"))
     except Exception as e:
         return f"<h3>Failed to log data: {e}</h3>", 500
-
-
+    
 @app.route("/api/v1/add-log", methods=["POST"])
+@api_login_required
 def api_add_log():
     """
-    Add a new sensor log to the database.
-    If 'temp_data' is included, forward it internally to /api/v1/forecast
-    to compute battery health without storing it.
+    API endpoint to add a new sensor log. Accepts JSON body with keys: steps, datetime (ISO or YYYY-MM-DDTHH:MM), raw_voltage, raw_current.
+    Returns JSON response with created log id or error message.
     """
     try:
-        # --- Parse incoming JSON or form data ---
-        data = request.get_json(silent=True) or request.form.to_dict()
-        if not data:
-            return jsonify({"error": "No data provided"}), 400
-
-        # --- Extract required core fields ---
-        steps = data.get("steps")
+        data = request.get_json() or request.form
+        steps = int(data.get("steps"))
+        # Accept either ISO with "T" or a space
         dt_str = data.get("datetime")
-        raw_voltage = data.get("raw_voltage")
-        raw_current = data.get("raw_current")
-
-        # Validate required fields
-        if steps is None or raw_voltage is None or raw_current is None:
-            return jsonify({
-                "error": "Missing required fields: steps, raw_voltage, raw_current"
-            }), 400
-
-        if not dt_str:
-            return jsonify({"error": "Missing 'datetime' field"}), 400
-
-        # Validate types
-        try:
-            steps = int(steps)
-            raw_voltage = float(raw_voltage)
-            raw_current = float(raw_current)
-        except ValueError:
-            return jsonify({
-                "error": "Invalid data type for steps, raw_voltage, or raw_current"
-            }), 400
-
-        # Safe datetime parsing
-        try:
-            from dateutil import parser
-            dt = parser.isoparse(dt_str)
-        except Exception:
-            return jsonify({"error": "Invalid datetime format"}), 400
-
-        # --- Save core data to database ---
-        new_log = SensorData(
-            steps=steps,
-            datetime=dt,
-            raw_voltage=raw_voltage,
-            raw_current=raw_current
-        )
-
+        if "T" in dt_str or "-" in dt_str:
+            dt = datetime.fromisoformat(dt_str)
+        else:
+            dt = datetime.strptime(dt_str, "%Y-%m-%d %H:%M")
+        raw_voltage = float(data.get("raw_voltage"))
+        raw_current = float(data.get("raw_current"))
+        new_log = SensorData(steps=steps, datetime=dt, raw_voltage=raw_voltage, raw_current=raw_current)
         db.session.add(new_log)
         db.session.commit()
-
-        # Invalidate forecast cache
+        # Invalidate the forecast so next read recomputes
         forecast_cache["date"] = None
-
-        # --- Handle optional temp_data ---
-        temp_data = data.get("temp_data")
-        forecast_result = None
-
-        if temp_data:
-            # Ensure temp_data is a dictionary
-            if not isinstance(temp_data, dict):
-                return jsonify({"error": "temp_data must be a JSON object"}), 400
-
-            import json
-            from flask import current_app
-
-            # Forward internally to /api/v1/forecast
-            with current_app.test_request_context(
-                "/api/v1/forecast",
-                method="POST",
-                data=json.dumps({"temp_data": temp_data}),
-                content_type='application/json'
-            ):
-                # Unpack tuple returned by Flask route
-                forecast_response, status_code = api_forecast()
-
-                # Check if the forecast endpoint succeeded
-                if status_code == 200:
-                    forecast_result = forecast_response.get_json()
-                else:
-                    forecast_result = {
-                        "error": "Forecast calculation failed",
-                        "status_code": status_code
-                    }
-
-        # --- Prepare final response ---
-        response = {
-            "status": "success",
-            "id": new_log.id
-        }
-
-        # Include forecast result if temp_data was processed
-        if forecast_result:
-            response["forecast"] = forecast_result
-
-        return jsonify(response), 201
-
+        return jsonify({"status": "success", "id": new_log.id}), 201
     except Exception as e:
-        db.session.rollback()
-        return jsonify({
-            "error": "Failed to add log",
-            "details": str(e)  # Replace with generic error in production
-        }), 400
-
+        return jsonify({"error": "Failed to add log", "details": str(e)}), 400
 
 
 

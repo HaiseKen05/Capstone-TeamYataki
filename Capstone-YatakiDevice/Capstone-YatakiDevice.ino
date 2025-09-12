@@ -1,36 +1,25 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
-#include <time.h>  // For NTP time sync
-#include <ArduinoJson.h> // For creating JSON payload
+#include <time.h>  // NTP time
 
-// ========================
-// WiFi Configuration
-// ========================
-const char* ssid = "ESP32-AP";           // WiFi SSID
-const char* password = "ESP32-Connect";  // WiFi Password
+// WiFi Credentials
+const char* ssid = "ESP32-AP";           // WIFI SSID
+const char* password = "ESP32-Connect";  // WIFI Password
 
-// ========================
-// Server Configuration
-// ========================
+// Server URLs
 const char* serverBaseURL = "http://192.168.254.109:5000";
 const char* pingRoute = "/ping";
-const char* dataRoute = "/api/v1/add-log";
+const char* dataRoute = "/add-log";
 
-// ========================
-// Hardware Configuration
-// ========================
-const int buttonPin = 13; // Push button for sending data
+const int buttonPin = 13;
 
-// ========================
-// Data Variables
-// ========================
+// Data variables
 String inputSteps;
 String inputVoltage;
 String inputCurrent;
-String inputTempVoltage; // For temp_data (battery health calculation only)
 
 bool readyToSend = false;
-bool serverOnline = false; // Track server availability
+bool serverOnline = false; // Flag to track server status
 
 void setup() {
   Serial.begin(115200);
@@ -43,9 +32,9 @@ void setup() {
     delay(500);
     Serial.print(".");
   }
-  Serial.println("\nWiFi connected!");
+  Serial.println("\nWiFi connected");
 
-  // Initialize NTP for accurate datetime
+  // Initialize NTP
   Serial.println("Syncing time with NTP...");
   configTime(8 * 3600, 0, "pool.ntp.org", "time.nist.gov"); // UTC+8 timezone
 
@@ -74,7 +63,7 @@ void setup() {
 void loop() {
   static int stage = 0;
 
-  // Handle serial input for steps, voltage, current, temp voltage
+  // Handle serial input for steps, voltage, current
   if (Serial.available()) {
     String input = Serial.readStringUntil('\n');
     input.trim();
@@ -83,22 +72,15 @@ void loop() {
       inputSteps = input;
       Serial.println("Enter raw voltage (e.g., 3.75):");
       stage++;
-    } 
-    else if (stage == 1) {
+    } else if (stage == 1) {
       inputVoltage = input;
       Serial.println("Enter raw current (e.g., 1.2):");
       stage++;
-    } 
-    else if (stage == 2) {
+    } else if (stage == 2) {
       inputCurrent = input;
-      Serial.println("Enter temp voltage (for battery health, e.g., 4.05):");
-      stage++;
-    }
-    else if (stage == 3) {
-      inputTempVoltage = input;
       Serial.println("Data is ready. Press the button on pin 13 to send.");
       readyToSend = true;
-      stage = 0; // Reset for next input cycle
+      stage = 0;
     }
   }
 
@@ -112,8 +94,7 @@ void loop() {
       inputSteps.toInt(),
       datetime,
       inputVoltage.toFloat(),
-      inputCurrent.toFloat(),
-      inputTempVoltage.toFloat()
+      inputCurrent.toFloat()
     );
 
     readyToSend = false;
@@ -125,7 +106,7 @@ void loop() {
 // Helper Functions
 // =========================
 
-// Get current date and time in ISO 8601 format
+// Get current date and time
 String getCurrentDateTime() {
   struct tm timeinfo;
   if (!getLocalTime(&timeinfo)) {
@@ -133,8 +114,8 @@ String getCurrentDateTime() {
     return "1970-01-01T00:00"; // fallback
   }
 
-  char buf[25];
-  strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", &timeinfo);
+  char buf[20];
+  strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M", &timeinfo);
   return String(buf);
 }
 
@@ -169,34 +150,22 @@ bool pingServer() {
   }
 }
 
-// Send sensor data with temp_data containing ONLY temp voltage
-void sendSensorData(int steps, String datetime, float voltage, float current, float tempVoltage) {
+// Send sensor data to server
+void sendSensorData(int steps, String datetime, float voltage, float current) {
   if (WiFi.status() == WL_CONNECTED) {
     HTTPClient http;
+
     String fullDataURL = String(serverBaseURL) + dataRoute;
     http.begin(fullDataURL);
-    http.addHeader("Content-Type", "application/json");
+    http.addHeader("Content-Type", "application/x-www-form-urlencoded");
 
-    // Create JSON payload
-    DynamicJsonDocument doc(1024);
-    doc["steps"] = steps;
-    doc["datetime"] = datetime;
-    doc["raw_voltage"] = voltage;
-    doc["raw_current"] = current;
+    // Format POST payload
+    String postData = "steps=" + String(steps) +
+                      "&datetime=" + datetime +
+                      "&raw_voltage=" + String(voltage) +
+                      "&raw_current=" + String(current);
 
-    // temp_data now only contains temp_voltage
-    JsonObject tempData = doc.createNestedObject("temp_data");
-    tempData["temp_voltage"] = tempVoltage;
-
-    // Convert JSON to string
-    String jsonPayload;
-    serializeJson(doc, jsonPayload);
-
-    Serial.println("Sending JSON payload:");
-    Serial.println(jsonPayload);
-
-    // Send POST request
-    int httpResponseCode = http.POST(jsonPayload);
+    int httpResponseCode = http.POST(postData);
 
     Serial.print("POST Response Code: ");
     Serial.println(httpResponseCode);
@@ -206,7 +175,7 @@ void sendSensorData(int steps, String datetime, float voltage, float current, fl
       Serial.println("Server Response:");
       Serial.println(response);
     } else {
-      Serial.println("Error sending POST request");
+      Serial.println("Error sending POST");
     }
 
     http.end();
