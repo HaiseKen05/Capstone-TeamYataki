@@ -1,0 +1,79 @@
+# =========================
+# === Voltage Percentage Utilities ===
+# =========================
+def voltage_to_percentage(raw_voltage: float, max_voltage: float = 4.2) -> float:
+    """
+    Convert raw voltage reading to battery percentage.
+    Assumes linear scale: 0V = 0%, max_voltage = 100%.
+    Clamps between 0 and 100.
+    
+    Args:
+        raw_voltage: The measured voltage.
+        max_voltage: The voltage corresponding to 100% (default 4.2V).
+    
+    Returns:
+        Percentage as float (0.0 to 100.0).
+    """
+    percentage = (raw_voltage / max_voltage) * 100
+    return max(0.0, min(100.0, percentage))
+
+
+# =========================
+# === API: Voltage Read ===
+# =========================
+@app.route("/api/v1/voltage-read", methods=["POST"])
+@api_login_required
+def api_voltage_read():
+    """
+    API endpoint to convert a voltage reading to battery percentage.
+    Temporary computation—no data saved to database.
+    Accepts JSON body with key: raw_voltage (float).
+    Returns JSON with percentage or error message.
+    """
+    try:
+        data = request.get_json() or request.form
+        raw_voltage = float(data.get("raw_voltage"))
+        if raw_voltage < 0:
+            raise ValueError("Voltage cannot be negative")
+        
+        percentage = voltage_to_percentage(raw_voltage)
+        return jsonify({
+            "status": "success",
+            "raw_voltage": round(raw_voltage, 2),
+            "percentage": round(percentage, 2),
+            "max_voltage": 4.2
+        }), 200
+    except (ValueError, KeyError, TypeError) as e:
+        return jsonify({"error": "Invalid input", "details": str(e)}), 400
+
+
+# =========================
+# === API: Battery Status (Similar to Forecast) ===
+# =========================
+@app.route("/api/v1/battery-status", methods=["GET"])
+@api_login_required
+def api_battery_status():
+    """
+    API endpoint that provides current battery status.
+    Similar to /api/v1/forecast: Returns formatted JSON with percentage.
+    For demo, uses a fixed voltage (e.g., 3.7V); in production, fetch from latest DB log or external sensor.
+    Calls voltage_to_percentage internally (mirroring "calls upon" voltage-read logic).
+    """
+    # Example: Fetch latest voltage from DB (optional integration)
+    # latest_log = SensorData.query.order_by(SensorData.datetime.desc()).first()
+    # if latest_log:
+    #     raw_voltage = latest_log.raw_voltage
+    # else:
+    #     raw_voltage = 3.7  # Fallback
+    
+    # For now, use a sample voltage to demonstrate (temporary data)
+    sample_voltage = 3.7  # Example: 3.7V -> ~88%
+    percentage = voltage_to_percentage(sample_voltage)
+    
+    response = {
+        "status_date": datetime.now().strftime("%B %d, %Y"),
+        "sample_voltage": round(sample_voltage, 2),
+        "battery_percentage": round(percentage, 2),
+        "health": "Good" if percentage > 20 else "Low" if percentage > 5 else "Critical"
+    }
+    return jsonify(response)
