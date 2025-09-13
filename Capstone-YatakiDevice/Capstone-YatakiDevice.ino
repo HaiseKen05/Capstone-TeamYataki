@@ -3,13 +3,14 @@
 #include <time.h>  // NTP time
 
 // WiFi Credentials
-const char* ssid = "ESP32-AP";           // WIFI SSID
-const char* password = "ESP32-Connect";  // WIFI Password
+const char* ssid = "";           // WIFI SSID
+const char* password = "";  // WIFI Password
 
 // Server URLs
-const char* serverBaseURL = "http://192.168.254.109:5000";
+const char* serverBaseURL = "http://localhost:5000";
 const char* pingRoute = "/ping";
 const char* dataRoute = "/add-log";
+const char* voltageRoute = "/api/v1/voltage-reading"; // NEW ENDPOINT
 
 const int buttonPin = 13;
 
@@ -17,6 +18,7 @@ const int buttonPin = 13;
 String inputSteps;
 String inputVoltage;
 String inputCurrent;
+String manualVoltage; // For /api/v1/voltage-reading
 
 bool readyToSend = false;
 bool serverOnline = false; // Flag to track server status
@@ -63,7 +65,7 @@ void setup() {
 void loop() {
   static int stage = 0;
 
-  // Handle serial input for steps, voltage, current
+  // Handle serial input for steps, voltage, current, and manual voltage
   if (Serial.available()) {
     String input = Serial.readStringUntil('\n');
     input.trim();
@@ -78,18 +80,23 @@ void loop() {
       stage++;
     } else if (stage == 2) {
       inputCurrent = input;
-      Serial.println("Data is ready. Press the button on pin 13 to send.");
+      Serial.println("Enter manual voltage for /api/v1/voltage-reading (e.g., 4.15):");
+      stage++;
+    } else if (stage == 3) {
+      manualVoltage = input;
+      Serial.println("Data is ready. Press the button on pin 13 to send both datasets.");
       readyToSend = true;
       stage = 0;
     }
   }
 
-  // When button is pressed, send the data
+  // When button is pressed, send both datasets
   if (readyToSend && digitalRead(buttonPin) == LOW) {
     delay(200); // debounce
 
     String datetime = getCurrentDateTime();
 
+    // Step 1: Send full dataset
     sendSensorData(
       inputSteps.toInt(),
       datetime,
@@ -97,8 +104,13 @@ void loop() {
       inputCurrent.toFloat()
     );
 
+    // Step 2: Wait a moment before sending voltage reading
+    delay(1000); // 1-second delay for safety
+
+    sendVoltageReading(manualVoltage.toFloat());
+
     readyToSend = false;
-    Serial.println("Enter number of steps:");
+    Serial.println("Both datasets sent. Enter number of steps:");
   }
 }
 
@@ -150,32 +162,70 @@ bool pingServer() {
   }
 }
 
-// Send sensor data to server
-void sendSensorData(int steps, String datetime, float voltage, float current) {
+// =========================
+// Send ONLY the voltage reading to /api/v1/voltage-reading
+// =========================
+void sendVoltageReading(float voltage) {
   if (WiFi.status() == WL_CONNECTED) {
     HTTPClient http;
 
-    String fullDataURL = String(serverBaseURL) + dataRoute;
-    http.begin(fullDataURL);
+    String fullVoltageURL = String(serverBaseURL) + voltageRoute;
+    http.begin(fullVoltageURL);
     http.addHeader("Content-Type", "application/x-www-form-urlencoded");
 
-    // Format POST payload
-    String postData = "steps=" + String(steps) +
-                      "&datetime=" + datetime +
-                      "&raw_voltage=" + String(voltage) +
-                      "&raw_current=" + String(current);
+    // Only send the voltage value
+    String postData = "voltage=" + String(voltage, 2); // 2 decimal places
 
+    Serial.println("Sending manual voltage to /api/v1/voltage-reading...");
     int httpResponseCode = http.POST(postData);
 
-    Serial.print("POST Response Code: ");
+    Serial.print("Voltage-Reading Response Code: ");
     Serial.println(httpResponseCode);
 
     if (httpResponseCode > 0) {
       String response = http.getString();
-      Serial.println("Server Response:");
+      Serial.println("Voltage-Reading Server Response:");
       Serial.println(response);
     } else {
-      Serial.println("Error sending POST");
+      Serial.println("Error sending to /api/v1/voltage-reading");
+    }
+
+    http.end();
+  } else {
+    Serial.println("WiFi not connected");
+  }
+}
+
+// =========================
+// Send FULL data to /api/v1/add-log
+// =========================
+void sendSensorData(int steps, String datetime, float voltage, float current) {
+  if (WiFi.status() == WL_CONNECTED) {
+    HTTPClient http;
+
+    // ----------- SEND TO /api/v1/add-log -----------
+    String fullDataURL = String(serverBaseURL) + dataRoute;
+    http.begin(fullDataURL);
+    http.addHeader("Content-Type", "application/x-www-form-urlencoded");
+
+    // Format POST payload for full dataset
+    String postData = "steps=" + String(steps) +
+                      "&datetime=" + datetime +
+                      "&raw_voltage=" + String(voltage, 2) +
+                      "&raw_current=" + String(current, 2);
+
+    Serial.println("Sending full dataset to /api/v1/add-log...");
+    int httpResponseCode = http.POST(postData);
+
+    Serial.print("Add-Log Response Code: ");
+    Serial.println(httpResponseCode);
+
+    if (httpResponseCode > 0) {
+      String response = http.getString();
+      Serial.println("Add-Log Server Response:");
+      Serial.println(response);
+    } else {
+      Serial.println("Error sending to /api/v1/add-log");
     }
 
     http.end();

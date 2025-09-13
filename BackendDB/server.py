@@ -53,6 +53,14 @@ forecast_cache = {
     "date": None
 }
 
+# ============================
+# === In-Memory Data Store ===
+# ============================
+# This will NOT persist after a server restart
+voltage_memory_store = []
+MAX_MEMORY_ENTRIES = 50  # prevent memory overflow
+
+
 # Minimum months of history required for monthly best-month prediction
 MIN_MONTHS_REQUIRED = 6
 
@@ -393,7 +401,106 @@ def api_add_log():
     except Exception as e:
         return jsonify({"error": "Failed to add log", "details": str(e)}), 400
 
+# @app.route("/api/v1/voltage-reading", methods=["POST"])
+# @api_login_required
+# def api_voltage_reading():
+#     """
+#     API endpoint to temporarily store voltage readings in server memory.
+#     Does NOT save to the database. Useful for quick, non-persistent readings.
 
+#     JSON Body:
+#     {
+#         "steps": 100,
+#         "datetime": "2025-09-13T14:30",
+#         "raw_voltage": 3.7,
+#         "raw_current": 1.2
+#     }
+#     """
+#     try:
+#         data = request.get_json() or request.form
+
+#         # Validate and parse input
+#         steps = int(data.get("steps", 0))
+#         dt_str = data.get("datetime")
+#         if not dt_str:
+#             return jsonify({"error": "Missing datetime"}), 400
+
+#         # Accept both ISO or "YYYY-MM-DD HH:MM"
+#         if "T" in dt_str:
+#             dt = datetime.fromisoformat(dt_str)
+#         else:
+#             dt = datetime.strptime(dt_str, "%Y-%m-%d %H:%M")
+
+#         raw_voltage = float(data.get("raw_voltage", 0))
+#         raw_current = float(data.get("raw_current", 0))
+
+#         # Create an in-memory record
+#         entry = {
+#             "steps": steps,
+#             "datetime": dt.strftime("%Y-%m-%d %H:%M:%S"),
+#             "voltage": raw_voltage,
+#             "current": raw_current
+#         }
+
+#         # Store in memory
+#         voltage_memory_store.append(entry)
+
+#         # Enforce max size
+#         if len(voltage_memory_store) > MAX_MEMORY_ENTRIES:
+#             voltage_memory_store.pop(0)
+
+#         return jsonify({
+#             "status": "success",
+#             "stored_count": len(voltage_memory_store),
+#             "latest_entry": entry
+#         }), 201
+
+#     except Exception as e:
+#         return jsonify({"error": "Failed to store voltage reading", "details": str(e)}), 400
+
+# =========================
+# Voltage Reading API
+# =========================
+voltage_readings = []  # Store voltage values in memory
+
+@app.route('/api/v1/voltage-reading', methods=['POST', 'GET'])
+def voltage_reading():
+    if request.method == 'POST':
+        # --- Handle POST request: Store new voltage ---
+        voltage = request.form.get('voltage')
+
+        if voltage is None:
+            return jsonify({
+                "status": "error",
+                "message": "Missing voltage parameter"
+            }), 400
+
+        try:
+            voltage_value = float(voltage)
+        except ValueError:
+            return jsonify({
+                "status": "error",
+                "message": "Invalid voltage value"
+            }), 400
+
+        # Store voltage reading in memory
+        voltage_readings.append(voltage_value)
+
+        return jsonify({
+            "status": "success",
+            "message": "Voltage reading stored",
+            "stored_count": len(voltage_readings),
+            "latest_voltage": voltage_value
+        }), 201
+
+    elif request.method == 'GET':
+        # --- Handle GET request: Retrieve all stored voltages ---
+        return jsonify({
+            "status": "success",
+            "count": len(voltage_readings),
+            "data": voltage_readings
+        }), 200
+    
 
 # =========================
 # === Logs & Export (Web) ===
