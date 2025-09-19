@@ -740,42 +740,6 @@ def api_forecast():
         response["message"] = "Not enough historical data for monthly forecast. Please collect more data."
     return jsonify(response)
 
-# @app.route("/api/v1/add-battery-health", methods=["POST"])
-# def api_add_battery_health():
-#     data = request.get_json()
-
-#     # Validate required fields
-#     required_fields = ["datetime", "battery_health"]
-#     missing = [field for field in required_fields if field not in data]
-#     if missing:
-#         return jsonify({"error": f"Missing fields: {', '.join(missing)}"}), 400
-
-#     try:
-#         # Parse datetime safely
-#         dt_str = data["datetime"]
-#         try:
-#             dt = datetime.fromisoformat(dt_str)
-#         except ValueError:
-#             return jsonify({"error": "Invalid datetime format. Use ISO 8601 format"}), 400
-
-#         # Create a new entry with only battery health data
-#         new_entry = SensorData(
-#             datetime=dt,
-#             battery_health=float(data["battery_health"]),
-#             steps=None,
-#             raw_voltage=None,
-#             raw_current=None
-#         )
-
-#         db.session.add(new_entry)
-#         db.session.commit()
-
-#         return jsonify({"message": "Battery health logged successfully"}), 201
-
-#     except Exception as e:
-#         db.session.rollback()
-#         return jsonify({"error": f"Failed to save battery health data: {str(e)}"}), 500
-
 @app.route("/api/v1/battery-health", methods=["GET"])
 def api_get_battery_health():
     try:
