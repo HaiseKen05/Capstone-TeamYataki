@@ -19,7 +19,8 @@ Capstone Thesis Repository
 |Joel Lim|
 
 # **System Description**
-# 📊 Sensor Data Monitoring and Forecasting System
+
+## 📊 Sensor Data Monitoring and Forecasting System
 
 A full-stack Flask web application for logging, visualizing, and forecasting telemetry sensor data — including step counts, voltage, and current readings. The system includes a rich dashboard interface with interactive charts, exportable reports, user authentication, and built-in forecasting models using linear regression.
 
