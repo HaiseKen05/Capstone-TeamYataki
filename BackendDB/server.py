@@ -723,17 +723,10 @@ def api_forecast():  # Handler that returns cached forecast data and monthly pre
         response["message"] = "Not enough historical data for monthly forecast. Please collect more data."  # Helpful message.
     return jsonify(response)  # Return JSON response to client.
 
-<<<<<<< HEAD
 @app.route("/api/v1/battery-health", methods=["GET"])  # API endpoint to fetch latest battery health reading and percentage.
 def api_get_battery_health():  # Handler to return battery health information from latest record.
     try:  # Wrap DB access in try/except to return consistent error responses on failure.
         # Get the latest record with a battery_health value  # We want the most recent non-null battery_health row.
-=======
-@app.route("/api/v1/battery-health", methods=["GET"])
-def api_get_battery_health():
-    try:
-        # Get the latest record with a battery_health value
->>>>>>> 420dab6bd020777ebd6ee9aa9fd0a0f208522923
         latest_record = (
             SensorData.query
             .filter(SensorData.battery_health.isnot(None))
