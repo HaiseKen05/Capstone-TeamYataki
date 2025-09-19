@@ -18,8 +18,6 @@ Capstone Thesis Repository
 |Niño Abao| 
 |Joel Lim|
 
-# Device Description
-
 # **System Description**
 # 📊 Sensor Data Monitoring and Forecasting System
 
