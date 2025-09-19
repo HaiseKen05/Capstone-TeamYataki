@@ -57,6 +57,9 @@ A full-stack Flask web application for logging, visualizing, and forecasting tel
 - Toggle dark/light mode
 - Preference saved in browser `localStorage`
 
+## 📱 Mobile App 
+- Refer to this link to see the Mobile App [repository](https://github.com/HaiseKen05/capstone_yataki)
+
 ---
 
 ## 🛠️ Tech Stack
