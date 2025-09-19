@@ -374,63 +374,6 @@ def add_log():
     except Exception as e:
         return f"<h3>Failed to log data: {e}</h3>", 500
     
-@app.route("/api/v1/add-log", methods=["POST"])
-@api_login_required
-def api_add_log():
-    """
-    API endpoint to add a new sensor log. Accepts JSON body with keys: steps, datetime (ISO or YYYY-MM-DDTHH:MM), raw_voltage, raw_current.
-    Returns JSON response with created log id or error message.
-    """
-    try:
-        data = request.get_json() or request.form
-        steps = int(data.get("steps"))
-        # Accept either ISO with "T" or a space
-        dt_str = data.get("datetime")
-        if "T" in dt_str or "-" in dt_str:
-            dt = datetime.fromisoformat(dt_str)
-        else:
-            dt = datetime.strptime(dt_str, "%Y-%m-%d %H:%M")
-        raw_voltage = float(data.get("raw_voltage"))
-        raw_current = float(data.get("raw_current"))
-        new_log = SensorData(steps=steps, datetime=dt, raw_voltage=raw_voltage, raw_current=raw_current)
-        db.session.add(new_log)
-        db.session.commit()
-        # Invalidate the forecast so next read recomputes
-        forecast_cache["date"] = None
-        return jsonify({"status": "success", "id": new_log.id}), 201
-    except Exception as e:
-        return jsonify({"error": "Failed to add log", "details": str(e)}), 400
-    
-
-# =========================
-# === Logs & Export (Web) ===
-# =========================
-@app.route("/api/latest-logs")
-@login_required
-def latest_logs():
-    """
-    Web-protected API endpoint (keeps original name) that returns last 10 logs as JSON.
-    This is retained for compatibility with front-end code that expects /api/latest-logs.
-    """
-    logs = (
-        SensorData.query.order_by(SensorData.datetime.desc())
-        .limit(10)
-        .all()
-    )
-    return jsonify({
-        "logs": [
-            {
-                "id": log.id,
-                "steps": log.steps,
-                "voltage": log.raw_voltage,
-                "current": log.raw_current,
-                "datetime": log.datetime.strftime("%Y-%m-%d %H:%M:%S")
-            } for log in logs
-        ]
-    })
-
-
-
 @app.route("/download-csv")
 def download_csv():
     """
@@ -728,93 +671,6 @@ def api_sensor_data():
         ]
     })
 
-
-@app.route("/api/v1/summary-data")
-@api_login_required
-def api_summary_data():
-    """
-    Return daily summary aggregates as JSON with pagination.
-    Query params:
-      - page (int)
-      - per_page (int)
-      - filter / month same as sensor-data
-    """
-    per_page = request.args.get("per_page", 10, type=int)
-    page = request.args.get("page", 1, type=int)
-    now = datetime.now()
-
-    filter_type = request.args.get("filter")
-    month_filter = request.args.get("month")
-
-    if month_filter:
-        try:
-            year, month = map(int, month_filter.split("-"))
-            start_time = datetime(year, month, 1)
-            end_time = datetime(year + 1, 1, 1) if month == 12 else datetime(year, month + 1, 1)
-        except ValueError:
-            start_time = end_time = None
-    elif filter_type == "day":
-        start_time = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        end_time = None
-    elif filter_type == "week":
-        start_time = now - timedelta(days=now.weekday())
-        end_time = None
-    elif filter_type == "month":
-        start_time = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        end_time = None
-    else:
-        start_time = end_time = None
-
-    summary_query = get_summary_query(start_time, end_time)
-    paginated = summary_query.paginate(page=page, per_page=per_page, error_out=False)
-
-    items = [
-        {
-            "date": row.date.strftime("%Y-%m-%d"),
-            "total_steps": int(row.total_steps or 0),
-            "total_voltage": float(row.total_voltage or 0.0),
-            "total_current": float(row.total_current or 0.0)
-        } for row in paginated.items
-    ]
-
-    return jsonify({
-        "page": page,
-        "per_page": per_page,
-        "total_pages": paginated.pages,
-        "total_items": paginated.total,
-        "items": items
-    })
-
-
-@app.route("/api/v1/chart-data")
-@api_login_required
-def api_chart_data():
-    """
-    Return paginated chart-ready daily aggregates as JSON.
-    Query params:
-      - chart_page (int)
-      - days_per_page (int)
-    """
-    chart_days_per_page = request.args.get("days_per_page", 7, type=int)
-    chart_page = request.args.get("chart_page", 1, type=int)
-
-    chart_query = get_chart_query()
-    daily_aggregates = chart_query.all()
-    total_chart_pages = ceil(len(daily_aggregates) / chart_days_per_page) if daily_aggregates else 1
-    paginated_chart_data = daily_aggregates[
-        (chart_page - 1) * chart_days_per_page : chart_page * chart_days_per_page
-    ][::-1]
-
-    return jsonify({
-        "labels": [d[0].strftime("%b %d") for d in paginated_chart_data],
-        "voltage": [round(d[1], 2) for d in paginated_chart_data],
-        "current": [round(d[2], 2) for d in paginated_chart_data],
-        "steps": [int(d[3] or 0) for d in paginated_chart_data],
-        "total_pages": total_chart_pages,
-        "current_page": chart_page
-    })
-
-
 @app.route("/api/v1/forecast")
 @api_login_required
 def api_forecast():
@@ -930,52 +786,6 @@ def _map_summary_to_frontend_shape(paginated):
     }
 
 
-@app.route("/api/daily-summary")
-@login_required
-def daily_summary_alias():
-    """
-    Same-origin alias for AJAX in the dashboard.
-    Mirrors /api/v1/summary-data but returns keys the front-end expects:
-      - entries (list of rows)
-      - current_page
-      - total_pages
-
-    Query params:
-      - page (int)
-      - per_page (int, default 10)
-      - (optional) filter, month — same semantics as UI
-    """
-    per_page = request.args.get("per_page", 10, type=int)
-    page = request.args.get("page", 1, type=int)
-    now = datetime.now()
-
-    filter_type = request.args.get("filter")
-    month_filter = request.args.get("month")
-
-    if month_filter:
-        try:
-            year, month = map(int, month_filter.split("-"))
-            start_time = datetime(year, month, 1)
-            end_time = datetime(year + 1, 1, 1) if month == 12 else datetime(year, month + 1, 1)
-        except ValueError:
-            start_time = end_time = None
-    elif filter_type == "day":
-        start_time = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        end_time = None
-    elif filter_type == "week":
-        start_time = now - timedelta(days=now.weekday())
-        end_time = None
-    elif filter_type == "month":
-        start_time = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        end_time = None
-    else:
-        start_time = end_time = None
-
-    summary_query = get_summary_query(start_time, end_time)
-    paginated = summary_query.paginate(page=page, per_page=per_page, error_out=False)
-    return jsonify(_map_summary_to_frontend_shape(paginated))
-
-
 @app.route("/api/chart-data")
 @login_required
 def chart_data_alias():
@@ -1024,39 +834,6 @@ def api_login():
         session["user_id"] = user.id
         return jsonify({"status": "success", "user_id": user.id})
     return jsonify({"error": "Invalid credentials"}), 401
-
-
-@app.route("/api/v1/logout", methods=["POST"])
-@api_login_required
-def api_logout():
-    """
-    API logout clears the session cookie (same action as web UI).
-    """
-    session.pop("user_id", None)
-    return jsonify({"status": "logged_out"})
-
-
-@app.route("/api/v1/register", methods=["POST"])
-def api_register():
-    """
-    API registration endpoint. Maintains the same playful sudo_command gate as the UI.
-    Accepts JSON body: username, password, sudo_command
-    """
-    data = request.get_json() or request.form
-    sudo = data.get("sudo_command", "")
-    if sudo.strip() != '$sudo-apt: enable | acc | reg | "TRUE" / admin':
-        return jsonify({"error": "Unauthorized: Admin command verification failed"}), 403
-
-    username = data.get("username")
-    password = data.get("password")
-    if not username or not password:
-        return jsonify({"error": "Missing username or password"}), 400
-
-    hashed_pw = bcrypt.generate_password_hash(password).decode("utf-8")
-    user = User(name=None, username=username, password=hashed_pw, role="Admin")
-    db.session.add(user)
-    db.session.commit()
-    return jsonify({"status": "created", "user_id": user.id}), 201
 
 
 # ========================
