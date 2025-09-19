@@ -18,10 +18,9 @@ Capstone Thesis Repository
 |Niño Abao| 
 |Joel Lim|
 
-# Device Description
-
 # **System Description**
-# 📊 Sensor Data Monitoring and Forecasting System
+
+## 📊 Sensor Data Monitoring and Forecasting System
 
 A full-stack Flask web application for logging, visualizing, and forecasting telemetry sensor data — including step counts, voltage, and current readings. The system includes a rich dashboard interface with interactive charts, exportable reports, user authentication, and built-in forecasting models using linear regression.
 
@@ -29,9 +28,9 @@ A full-stack Flask web application for logging, visualizing, and forecasting tel
 
 ## 🚀 Features
 
-### 🧾 Data Management
-- Add logs manually via the dashboard
-- Log fields: `steps`, `raw_voltage`, `raw_current`, `datetime`
+### 🧾 Data Management 
+- Add logs manually via the dashboard - to be changed to automatic
+- Log fields: `steps`, `raw_voltage`, `raw_current`, `datetime`, `battery_health`
 - API to retrieve latest logs as JSON
 
 ### 📈 Dashboard and Visualization
@@ -56,6 +55,9 @@ A full-stack Flask web application for logging, visualizing, and forecasting tel
 ### 🌓 Dark Mode Support
 - Toggle dark/light mode
 - Preference saved in browser `localStorage`
+
+### 📱 Mobile App 
+- Refer to this link to see the Mobile App [repository](https://github.com/HaiseKen05/capstone_yataki)
 
 ---
 
