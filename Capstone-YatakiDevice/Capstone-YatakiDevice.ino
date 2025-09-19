@@ -2,44 +2,38 @@
 #include <HTTPClient.h>
 #include <time.h>  // NTP time
 
-// WiFi Credentials
-const char* ssid = "";           // WIFI SSID
-const char* password = "";  // WIFI Password
+// Wi-Fi Credentials
+const char* ssid = "ESP32-AP";
+const char* password = "ESP32-Connect";
 
-// Server URLs
-const char* serverBaseURL = "http://localhost:5000";
-const char* pingRoute = "/ping";
-const char* dataRoute = "/add-log";
-const char* voltageRoute = "/api/v1/voltage-reading"; // NEW ENDPOINT
+// API Endpoints
+const char* serverURL        = "http://192.168.254.107:5000/add-log";
+const char* pingURL          = "http://192.168.254.107:5000/ping";
+const char* batteryHealthURL = "http://192.168.254.107:5000/api/v1/add-battery-health";
 
+// Button
 const int buttonPin = 13;
 
-// Data variables
+// User inputs
 String inputSteps;
 String inputVoltage;
 String inputCurrent;
-String manualVoltage; // For /api/v1/voltage-reading
+String inputBatteryHealth;
 
 bool readyToSend = false;
-bool serverOnline = false; // Flag to track server status
 
 void setup() {
   Serial.begin(115200);
   pinMode(buttonPin, INPUT_PULLUP);
+  delay(1000);
 
   // Connect to Wi-Fi
-  Serial.print("Connecting to WiFi");
-  WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-  Serial.println("\nWiFi connected");
+  connectToWiFi();
 
   // Initialize NTP
-  Serial.println("Syncing time with NTP...");
-  configTime(8 * 3600, 0, "pool.ntp.org", "time.nist.gov"); // UTC+8 timezone
+  configTime(8 * 3600, 0, "pool.ntp.org", "time.nist.gov");
 
+  Serial.println("Waiting for NTP time...");
   struct tm timeinfo;
   while (!getLocalTime(&timeinfo)) {
     Serial.print(".");
@@ -47,25 +41,24 @@ void setup() {
   }
   Serial.println("\nTime synchronized!");
 
-  // After time sync, immediately ping the server
+  // Check server availability
   Serial.println("Checking server availability...");
-
-  while (!serverOnline) {
-    serverOnline = pingServer();
-    if (!serverOnline) {
-      Serial.println("Server offline, retrying in 5 seconds...");
-      delay(5000);
-    }
+  while (!pingServer()) {
+    Serial.println("Server is not reachable. Retrying in 10 seconds...");
+    delay(10000);
   }
 
-  Serial.println("Server is online! Ready to collect data.");
+  Serial.println("Server is reachable.");
   Serial.println("Enter number of steps:");
 }
 
 void loop() {
+  // Monitor Wi-Fi connection
+  checkWiFiConnection();
+
   static int stage = 0;
 
-  // Handle serial input for steps, voltage, current, and manual voltage
+  // Handle serial input step-by-step
   if (Serial.available()) {
     String input = Serial.readStringUntil('\n');
     input.trim();
@@ -80,23 +73,23 @@ void loop() {
       stage++;
     } else if (stage == 2) {
       inputCurrent = input;
-      Serial.println("Enter manual voltage for /api/v1/voltage-reading (e.g., 4.15):");
+      Serial.println("Enter battery health (e.g., 87.5):");
       stage++;
     } else if (stage == 3) {
-      manualVoltage = input;
-      Serial.println("Data is ready. Press the button on pin 13 to send both datasets.");
+      inputBatteryHealth = input;
+      Serial.println("Data is ready. Press the button on pin 13 to send.");
       readyToSend = true;
       stage = 0;
     }
   }
 
-  // When button is pressed, send both datasets
+  // When button is pressed, send all data to both endpoints
   if (readyToSend && digitalRead(buttonPin) == LOW) {
     delay(200); // debounce
 
     String datetime = getCurrentDateTime();
 
-    // Step 1: Send full dataset
+    // Send base log data to /add-log
     sendSensorData(
       inputSteps.toInt(),
       datetime,
@@ -104,26 +97,19 @@ void loop() {
       inputCurrent.toFloat()
     );
 
-    // Step 2: Wait a moment before sending voltage reading
-    delay(1000); // 1-second delay for safety
-
-    sendVoltageReading(manualVoltage.toFloat());
+    // Send battery health data to /api/v1/add-battery-health
+    sendBatteryHealth(inputBatteryHealth.toFloat(), datetime);
 
     readyToSend = false;
-    Serial.println("Both datasets sent. Enter number of steps:");
+    Serial.println("Enter number of steps:");
   }
 }
 
-// =========================
-// Helper Functions
-// =========================
-
-// Get current date and time
 String getCurrentDateTime() {
   struct tm timeinfo;
   if (!getLocalTime(&timeinfo)) {
     Serial.println("Failed to obtain time");
-    return "1970-01-01T00:00"; // fallback
+    return "1970-01-01T00:00";
   }
 
   char buf[20];
@@ -131,63 +117,97 @@ String getCurrentDateTime() {
   return String(buf);
 }
 
-// Ping the server before sending data
-bool pingServer() {
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("WiFi not connected");
-    return false;
+// Connect to Wi-Fi initially
+void connectToWiFi() {
+  Serial.print("Connecting to WiFi");
+  WiFi.begin(ssid, password);
+
+  int attempts = 0;
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+    attempts++;
+
+    if (attempts >= 60) { // 30 seconds timeout
+      Serial.println("\nFailed to connect to Wi-Fi. Restarting...");
+      ESP.restart();
+    }
   }
 
-  HTTPClient http;
-  String fullPingURL = String(serverBaseURL) + pingRoute;
+  Serial.println("\nWiFi connected successfully!");
+  Serial.print("IP Address: ");
+  Serial.println(WiFi.localIP());
+}
 
-  Serial.print("Pinging server: ");
-  Serial.println(fullPingURL);
+// Continuously check if Wi-Fi is still connected
+void checkWiFiConnection() {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("Wi-Fi disconnected! Attempting to reconnect...");
 
-  http.begin(fullPingURL);
-  int httpResponseCode = http.GET();
+    WiFi.disconnect();
+    WiFi.begin(ssid, password);
 
-  Serial.print("Ping response code: ");
-  Serial.println(httpResponseCode);
+    int retryCount = 0;
+    while (WiFi.status() != WL_CONNECTED && retryCount < 10) { // 5 seconds max
+      delay(500);
+      Serial.print(".");
+      retryCount++;
+    }
 
-  if (httpResponseCode == 200) {
-    String response = http.getString();
-    Serial.println("Ping response: " + response);
-    http.end();
-    return true;
-  } else {
-    Serial.println("Failed to ping server.");
-    http.end();
-    return false;
+    if (WiFi.status() == WL_CONNECTED) {
+      Serial.println("\nReconnected to Wi-Fi!");
+    } else {
+      Serial.println("\nFailed to reconnect to Wi-Fi. Retrying later...");
+    }
   }
 }
 
-// =========================
-// Send ONLY the voltage reading to /api/v1/voltage-reading
-// =========================
-void sendVoltageReading(float voltage) {
+// Function: Ping the server
+bool pingServer() {
   if (WiFi.status() == WL_CONNECTED) {
     HTTPClient http;
+    http.begin(pingURL);
+    int httpResponseCode = http.GET();
 
-    String fullVoltageURL = String(serverBaseURL) + voltageRoute;
-    http.begin(fullVoltageURL);
+    if (httpResponseCode == 200) {
+      String response = http.getString();
+      Serial.print("Ping response: ");
+      Serial.println(response);
+      http.end();
+      return true;
+    } else {
+      Serial.print("Ping failed, code: ");
+      Serial.println(httpResponseCode);
+    }
+    http.end();
+  } else {
+    Serial.println("WiFi not connected");
+  }
+  return false;
+}
+
+// Send data to /add-log
+void sendSensorData(int steps, String datetime, float voltage, float current) {
+  if (WiFi.status() == WL_CONNECTED) {
+    HTTPClient http;
+    http.begin(serverURL);
     http.addHeader("Content-Type", "application/x-www-form-urlencoded");
 
-    // Only send the voltage value
-    String postData = "voltage=" + String(voltage, 2); // 2 decimal places
+    String postData = "steps=" + String(steps) +
+                      "&datetime=" + datetime +
+                      "&raw_voltage=" + String(voltage) +
+                      "&raw_current=" + String(current);
 
-    Serial.println("Sending manual voltage to /api/v1/voltage-reading...");
     int httpResponseCode = http.POST(postData);
 
-    Serial.print("Voltage-Reading Response Code: ");
+    Serial.print("POST /add-log Response Code: ");
     Serial.println(httpResponseCode);
 
     if (httpResponseCode > 0) {
-      String response = http.getString();
-      Serial.println("Voltage-Reading Server Response:");
-      Serial.println(response);
+      Serial.println("Server Response:");
+      Serial.println(http.getString());
     } else {
-      Serial.println("Error sending to /api/v1/voltage-reading");
+      Serial.println("Error sending POST to /add-log");
     }
 
     http.end();
@@ -196,36 +216,26 @@ void sendVoltageReading(float voltage) {
   }
 }
 
-// =========================
-// Send FULL data to /api/v1/add-log
-// =========================
-void sendSensorData(int steps, String datetime, float voltage, float current) {
+// Send data to /api/v1/add-battery-health
+void sendBatteryHealth(float batteryHealth, String datetime) {
   if (WiFi.status() == WL_CONNECTED) {
     HTTPClient http;
+    http.begin(batteryHealthURL);
+    http.addHeader("Content-Type", "application/json");
 
-    // ----------- SEND TO /api/v1/add-log -----------
-    String fullDataURL = String(serverBaseURL) + dataRoute;
-    http.begin(fullDataURL);
-    http.addHeader("Content-Type", "application/x-www-form-urlencoded");
+    // Create JSON payload
+    String jsonPayload = "{\"datetime\": \"" + datetime + "\", \"battery_health\": " + String(batteryHealth, 2) + "}";
 
-    // Format POST payload for full dataset
-    String postData = "steps=" + String(steps) +
-                      "&datetime=" + datetime +
-                      "&raw_voltage=" + String(voltage, 2) +
-                      "&raw_current=" + String(current, 2);
+    int httpResponseCode = http.POST(jsonPayload);
 
-    Serial.println("Sending full dataset to /api/v1/add-log...");
-    int httpResponseCode = http.POST(postData);
-
-    Serial.print("Add-Log Response Code: ");
+    Serial.print("POST /api/v1/add-battery-health Response Code: ");
     Serial.println(httpResponseCode);
 
     if (httpResponseCode > 0) {
-      String response = http.getString();
-      Serial.println("Add-Log Server Response:");
-      Serial.println(response);
+      Serial.println("Server Response:");
+      Serial.println(http.getString());
     } else {
-      Serial.println("Error sending to /api/v1/add-log");
+      Serial.println("Error sending POST to /api/v1/add-battery-health");
     }
 
     http.end();
