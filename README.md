@@ -29,9 +29,9 @@ A full-stack Flask web application for logging, visualizing, and forecasting tel
 
 ## 🚀 Features
 
-### 🧾 Data Management
-- Add logs manually via the dashboard
-- Log fields: `steps`, `raw_voltage`, `raw_current`, `datetime`
+### 🧾 Data Management 
+- Add logs manually via the dashboard - to be changed to automatic
+- Log fields: `steps`, `raw_voltage`, `raw_current`, `datetime`, `battery_health`
 - API to retrieve latest logs as JSON
 
 ### 📈 Dashboard and Visualization
