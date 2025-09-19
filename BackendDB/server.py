@@ -357,22 +357,64 @@ def index():
 @app.route("/add-log", methods=["POST"])
 def add_log():
     """
-    Web UI form endpoint to add a new sensor log. Invalidate forecast cache on success.
+    Unified endpoint to add a new sensor log.
+    Handles steps, voltage, current, and battery health in a single record.
+    Invalidate forecast cache on success.
+    
+    Accepts:
+      - Web form submission (application/x-www-form-urlencoded)
+      - JSON body (application/json)
     """
     try:
-        form = request.form
+        # Detect if request is JSON or form
+        if request.is_json:
+            data = request.get_json()
+            steps = data.get("steps")
+            dt_str = data.get("datetime")
+            raw_voltage = data.get("raw_voltage")
+            raw_current = data.get("raw_current")
+            battery_health = data.get("battery_health")
+        else:
+            form = request.form
+            steps = form.get("steps")
+            dt_str = form.get("datetime")
+            raw_voltage = form.get("raw_voltage")
+            raw_current = form.get("raw_current")
+            battery_health = form.get("battery_health")
+
+        # Validate datetime
+        try:
+            dt = datetime.fromisoformat(dt_str)
+        except ValueError:
+            return jsonify({"error": "Invalid datetime format. Use ISO 8601 format"}), 400
+
+        # Create new log entry
         new_log = SensorData(
-            steps=int(form["steps"]),
-            datetime=datetime.strptime(form["datetime"], "%Y-%m-%dT%H:%M"),
-            raw_voltage=float(form["raw_voltage"]),
-            raw_current=float(form["raw_current"])
+            datetime=dt,
+            steps=int(steps) if steps is not None else None,
+            raw_voltage=float(raw_voltage) if raw_voltage is not None else None,
+            raw_current=float(raw_current) if raw_current is not None else None,
+            battery_health=float(battery_health) if battery_health is not None else None
         )
+
         db.session.add(new_log)
         db.session.commit()
+
+        # Invalidate forecast cache
         forecast_cache["date"] = None
-        return redirect(url_for("sensor_dashboard"))
+
+        # Return based on request type
+        if request.is_json:
+            return jsonify({"message": "Sensor data logged successfully"}), 201
+        else:
+            return redirect(url_for("sensor_dashboard"))
+
     except Exception as e:
+        db.session.rollback()
+        if request.is_json:
+            return jsonify({"error": f"Failed to log data: {str(e)}"}), 500
         return f"<h3>Failed to log data: {e}</h3>", 500
+
     
 @app.route("/download-csv")
 def download_csv():
@@ -698,41 +740,41 @@ def api_forecast():
         response["message"] = "Not enough historical data for monthly forecast. Please collect more data."
     return jsonify(response)
 
-@app.route("/api/v1/add-battery-health", methods=["POST"])
-def api_add_battery_health():
-    data = request.get_json()
+# @app.route("/api/v1/add-battery-health", methods=["POST"])
+# def api_add_battery_health():
+#     data = request.get_json()
 
-    # Validate required fields
-    required_fields = ["datetime", "battery_health"]
-    missing = [field for field in required_fields if field not in data]
-    if missing:
-        return jsonify({"error": f"Missing fields: {', '.join(missing)}"}), 400
+#     # Validate required fields
+#     required_fields = ["datetime", "battery_health"]
+#     missing = [field for field in required_fields if field not in data]
+#     if missing:
+#         return jsonify({"error": f"Missing fields: {', '.join(missing)}"}), 400
 
-    try:
-        # Parse datetime safely
-        dt_str = data["datetime"]
-        try:
-            dt = datetime.fromisoformat(dt_str)
-        except ValueError:
-            return jsonify({"error": "Invalid datetime format. Use ISO 8601 format"}), 400
+#     try:
+#         # Parse datetime safely
+#         dt_str = data["datetime"]
+#         try:
+#             dt = datetime.fromisoformat(dt_str)
+#         except ValueError:
+#             return jsonify({"error": "Invalid datetime format. Use ISO 8601 format"}), 400
 
-        # Create a new entry with only battery health data
-        new_entry = SensorData(
-            datetime=dt,
-            battery_health=float(data["battery_health"]),
-            steps=None,
-            raw_voltage=None,
-            raw_current=None
-        )
+#         # Create a new entry with only battery health data
+#         new_entry = SensorData(
+#             datetime=dt,
+#             battery_health=float(data["battery_health"]),
+#             steps=None,
+#             raw_voltage=None,
+#             raw_current=None
+#         )
 
-        db.session.add(new_entry)
-        db.session.commit()
+#         db.session.add(new_entry)
+#         db.session.commit()
 
-        return jsonify({"message": "Battery health logged successfully"}), 201
+#         return jsonify({"message": "Battery health logged successfully"}), 201
 
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"error": f"Failed to save battery health data: {str(e)}"}), 500
+#     except Exception as e:
+#         db.session.rollback()
+#         return jsonify({"error": f"Failed to save battery health data: {str(e)}"}), 500
 
 @app.route("/api/v1/battery-health", methods=["GET"])
 def api_get_battery_health():

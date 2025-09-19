@@ -2,19 +2,18 @@
 #include <HTTPClient.h>
 #include <time.h>  // NTP time
 
-// Wi-Fi Credentials
+// ====== Wi-Fi Credentials ======
 const char* ssid = "ESP32-AP";
 const char* password = "ESP32-Connect";
 
-// API Endpoints
-const char* serverURL        = "http://192.168.254.107:5000/add-log";
-const char* pingURL          = "http://192.168.254.107:5000/ping";
-const char* batteryHealthURL = "http://192.168.254.107:5000/api/v1/add-battery-health";
+// ====== API Endpoint ======
+const char* serverURL = "http://192.168.254.107:5000/add-log";
+const char* pingURL   = "http://192.168.254.107:5000/ping";
 
-// Button
-const int buttonPin = 13;
+// ====== Hardware Config ======
+const int buttonPin = 13; // Button to trigger data sending
 
-// User inputs
+// ====== User Inputs ======
 String inputSteps;
 String inputVoltage;
 String inputCurrent;
@@ -30,7 +29,7 @@ void setup() {
   // Connect to Wi-Fi
   connectToWiFi();
 
-  // Initialize NTP
+  // Initialize NTP for accurate timestamps
   configTime(8 * 3600, 0, "pool.ntp.org", "time.nist.gov");
 
   Serial.println("Waiting for NTP time...");
@@ -77,34 +76,35 @@ void loop() {
       stage++;
     } else if (stage == 3) {
       inputBatteryHealth = input;
-      Serial.println("Data is ready. Press the button on pin 13 to send.");
+      Serial.println("Data ready. Press the button on pin 13 to send.");
       readyToSend = true;
       stage = 0;
     }
   }
 
-  // When button is pressed, send all data to both endpoints
+  // When button is pressed, send data to unified endpoint
   if (readyToSend && digitalRead(buttonPin) == LOW) {
-    delay(200); // debounce
+    delay(200); // Debounce
 
     String datetime = getCurrentDateTime();
 
-    // Send base log data to /add-log
-    sendSensorData(
+    // Send all data in a single request
+    sendAllData(
       inputSteps.toInt(),
       datetime,
       inputVoltage.toFloat(),
-      inputCurrent.toFloat()
+      inputCurrent.toFloat(),
+      inputBatteryHealth.toFloat()
     );
-
-    // Send battery health data to /api/v1/add-battery-health
-    sendBatteryHealth(inputBatteryHealth.toFloat(), datetime);
 
     readyToSend = false;
     Serial.println("Enter number of steps:");
   }
 }
 
+// ====== Helper Functions ======
+
+// Get current datetime as ISO 8601 string
 String getCurrentDateTime() {
   struct tm timeinfo;
   if (!getLocalTime(&timeinfo)) {
@@ -117,7 +117,7 @@ String getCurrentDateTime() {
   return String(buf);
 }
 
-// Connect to Wi-Fi initially
+// Connect to Wi-Fi
 void connectToWiFi() {
   Serial.print("Connecting to WiFi");
   WiFi.begin(ssid, password);
@@ -139,7 +139,7 @@ void connectToWiFi() {
   Serial.println(WiFi.localIP());
 }
 
-// Continuously check if Wi-Fi is still connected
+// Monitor and auto-reconnect Wi-Fi
 void checkWiFiConnection() {
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("Wi-Fi disconnected! Attempting to reconnect...");
@@ -148,7 +148,7 @@ void checkWiFiConnection() {
     WiFi.begin(ssid, password);
 
     int retryCount = 0;
-    while (WiFi.status() != WL_CONNECTED && retryCount < 10) { // 5 seconds max
+    while (WiFi.status() != WL_CONNECTED && retryCount < 10) {
       delay(500);
       Serial.print(".");
       retryCount++;
@@ -162,7 +162,7 @@ void checkWiFiConnection() {
   }
 }
 
-// Function: Ping the server
+// Ping the server to check connectivity
 bool pingServer() {
   if (WiFi.status() == WL_CONNECTED) {
     HTTPClient http;
@@ -186,17 +186,22 @@ bool pingServer() {
   return false;
 }
 
-// Send data to /add-log
-void sendSensorData(int steps, String datetime, float voltage, float current) {
+// Send all data to the unified /add-log endpoint
+void sendAllData(int steps, String datetime, float voltage, float current, float batteryHealth) {
   if (WiFi.status() == WL_CONNECTED) {
     HTTPClient http;
     http.begin(serverURL);
     http.addHeader("Content-Type", "application/x-www-form-urlencoded");
 
+    // Combine everything into one payload
     String postData = "steps=" + String(steps) +
                       "&datetime=" + datetime +
-                      "&raw_voltage=" + String(voltage) +
-                      "&raw_current=" + String(current);
+                      "&raw_voltage=" + String(voltage, 2) +
+                      "&raw_current=" + String(current, 2) +
+                      "&battery_health=" + String(batteryHealth, 2);
+
+    Serial.println("Sending data to server:");
+    Serial.println(postData);
 
     int httpResponseCode = http.POST(postData);
 
@@ -208,34 +213,6 @@ void sendSensorData(int steps, String datetime, float voltage, float current) {
       Serial.println(http.getString());
     } else {
       Serial.println("Error sending POST to /add-log");
-    }
-
-    http.end();
-  } else {
-    Serial.println("WiFi not connected");
-  }
-}
-
-// Send data to /api/v1/add-battery-health
-void sendBatteryHealth(float batteryHealth, String datetime) {
-  if (WiFi.status() == WL_CONNECTED) {
-    HTTPClient http;
-    http.begin(batteryHealthURL);
-    http.addHeader("Content-Type", "application/json");
-
-    // Create JSON payload
-    String jsonPayload = "{\"datetime\": \"" + datetime + "\", \"battery_health\": " + String(batteryHealth, 2) + "}";
-
-    int httpResponseCode = http.POST(jsonPayload);
-
-    Serial.print("POST /api/v1/add-battery-health Response Code: ");
-    Serial.println(httpResponseCode);
-
-    if (httpResponseCode > 0) {
-      Serial.println("Server Response:");
-      Serial.println(http.getString());
-    } else {
-      Serial.println("Error sending POST to /api/v1/add-battery-health");
     }
 
     http.end();
