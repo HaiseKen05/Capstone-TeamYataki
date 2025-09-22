@@ -7,11 +7,8 @@ const char* ssid = "ESP32-AP";
 const char* password = "ESP32-Connect";
 
 // ====== API Endpoint ======
-const char* serverURL = "http://192.168.254.113:5000/add-log";
-const char* pingURL   = "http://192.168.254.113:5000/ping";
-
-// ====== Hardware Config ======
-const int buttonPin = 13; // Button to trigger data sending
+const char* serverURL = "http://192.168.254.107:5000/add-log";
+const char* pingURL   = "http://192.168.254.107:5000/ping";
 
 // ====== From WIP CODE 1: Pin Assignments ===
 const int voltagePin = 36; // VT pin connected to GPIO36 (VP)
@@ -47,16 +44,10 @@ int steps;
 float voltage;
 float current;
 float batteryHealth;
-bool readyToSend = false;
 
 void setup() {
   Serial.begin(115200);
-  pinMode(buttonPin, INPUT_PULLUP);
   delay(1000);
-
-  Serial.println("MAX471 + ESP32 Voltage Session Tracker with WiFi Sending");
-  Serial.println("Waiting for voltage events...");
-  Serial.println("--------------------------------------");
 
   // Connect to Wi-Fi
   connectToWiFi();
@@ -80,6 +71,8 @@ void setup() {
   }
 
   Serial.println("Server is reachable.");
+  Serial.println("Capstone Yataki Device is ready.");
+  Serial.println("Reading voltage and current data. ");
 }
 
 void loop() {
@@ -118,7 +111,7 @@ void loop() {
     totalCurrent += currentAmps;
     lastDetectionTime = currentTime;
 
-    Serial.print("Event #");
+    Serial.print("Step #");
     Serial.print(eventCounter);
     Serial.print(" | Voltage: ");
     Serial.print(actualVoltage, 3);
@@ -134,12 +127,12 @@ void loop() {
   if (sessionActive && (currentTime - lastDetectionTime > SESSION_TIMEOUT)) {
     // Session has ended, prepare data
     Serial.println("\n--- Session Summary ---");
-    Serial.print("Total Events: ");
+    Serial.print("Total Steps: ");
     Serial.println(eventCounter);
-    Serial.print("Total Voltage (sum): ");
+    Serial.print("Total Voltage: ");
     Serial.print(totalVoltage, 3);
     Serial.println(" V");
-    Serial.print("Total Current (sum): ");
+    Serial.print("Total Current: ");
     Serial.print(totalCurrent, 3);
     Serial.println(" A");
     Serial.println("-----------------------\n");
@@ -150,31 +143,28 @@ void loop() {
     current = totalCurrent;
     batteryHealth = 0.0; // Placeholder, to be fixed later
 
-    readyToSend = true;
-    Serial.println("Data ready. Press the button on pin 13 to send.");
-
-    // Reset for next session
+    // Reset session before sending data
     sessionActive = false;
     lastVoltage = 0.0;
-  }
 
-  // When button is pressed, send data to unified endpoint
-  if (readyToSend && digitalRead(buttonPin) == LOW) {
-    delay(200); // Debounce
+    // Automatically ping and send data
+    Serial.println("Pinging server before sending data...");
+    if (pingServer()) {
+      Serial.println("Server is online. Sending data now...");
 
-    String datetime = getCurrentDateTime();
+      String datetime = getCurrentDateTime();
 
-    // Send all data in a single request
-    sendAllData(
-      steps,
-      datetime,
-      voltage,
-      current,
-      batteryHealth
-    );
+      sendAllData(
+        steps,
+        datetime,
+        voltage,
+        current,
+        batteryHealth
+      );
 
-    readyToSend = false;
-    Serial.println("Waiting for next session...");
+    } else {
+      Serial.println("Server is unreachable. Data will NOT be sent yet.");
+    }
   }
 
   delay(50); // Reduce CPU usage slightly
