@@ -10,9 +10,9 @@
       * /api/daily-summary (mirrors /api/v1/summary-data but keys: entries, current_page)  # Alias mapping note.
 """  # End of file-level docstring explaining the file purpose and changes.
 
-# ========================  # Visual separator comment indicating start of standard library imports.
-# === Standard Library ===  # Header comment labeling section for readability.
-# ========================  # End of header; purely organizational.
+# ========================  
+# === Standard Library ===  
+# ========================  
 
 from datetime import datetime, timedelta  # Import datetime utilities used across request handling and forecasting.
 from functools import wraps  # Import wraps for preserving function metadata in decorators.

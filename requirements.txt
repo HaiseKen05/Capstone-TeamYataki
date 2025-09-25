@@ -6,3 +6,10 @@ numpy
 scikit-learn
 Flask-Cors
 Flask-Caching
+PyMySQL
+
+# FOR MAC
+pip3 install Flask Flask-Bcrypt Flask-SQLAlchemy pandas numpy scikit-learn Flask-Cors Flask-Caching PyMySQL
+
+# FOR WINDOWS 
+pip install Flask Flask-Bcrypt Flask-SQLAlchemy pandas numpy scikit-learn Flask-Cors Flask-Caching
