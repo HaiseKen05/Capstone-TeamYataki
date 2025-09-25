@@ -3,12 +3,12 @@
 #include <time.h>  // NTP time
 
 // ====== Wi-Fi Credentials ======
-const char* ssid = "ESP32-AP";
-const char* password = "ESP32-Connect";
+const char* ssid = "";
+const char* password = "";
 
 // ====== API Endpoint ======
-const char* serverURL = "http://192.168.254.107:5000/add-log";
-const char* pingURL   = "http://192.168.254.107:5000/ping";
+const char* serverURL = "http://172.20.10.4:5000/add-log";
+const char* pingURL   = "http://172.20.10.4:5000/ping";
 
 // ====== From WIP CODE 1: Pin Assignments ===
 const int voltagePin = 36; // VT pin connected to GPIO36 (VP)
