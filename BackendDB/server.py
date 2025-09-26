@@ -23,9 +23,9 @@ import csv  # Import csv for generating CSV exports for web UI.
 from io import BytesIO, StringIO  # Import in-memory file buffers for CSV file creation/download.
 from math import ceil  # Import ceil to compute number of pages for pagination.
 
-# ============================  # Visual separator comment indicating start of third-party packages.
-# === Third-Party Packages ===  # Header comment labeling section for readability.
-# ============================  # End of header; purely organizational.
+# ============================  
+# === Third-Party Packages ===  
+# ============================  
 
 from flask import (  # Import core Flask objects used throughout the app.
     Flask, request, render_template, redirect,  # Flask app, request context, HTML rendering, redirects.
