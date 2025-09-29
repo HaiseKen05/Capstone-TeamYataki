@@ -32,7 +32,8 @@ CREATE TABLE `sensor_data` (
   `steps` int(11) DEFAULT NULL,
   `datetime` datetime DEFAULT NULL,
   `raw_voltage` float DEFAULT NULL,
-  `raw_current` float DEFAULT NULL
+  `raw_current` float DEFAULT NULL,
+  `battery_health` float DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
